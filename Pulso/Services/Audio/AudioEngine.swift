@@ -4,7 +4,7 @@ import Accelerate
 import SwiftUI
 
 /// Motor de audio profesional para Pulso DJ
-/// Arquitectura: PlayerNode → TimePitch → EQ Isolator (3 biquad bands) → Channel Fader → Master Mixer
+/// Arquitectura: PlayerNode → TimePitch → EQ Isolator (3 bandas) → Channel Fader → Master Mixer
 @MainActor
 final class AudioEngine: ObservableObject {
 
@@ -13,7 +13,7 @@ final class AudioEngine: ObservableObject {
     let deckB = DeckState(id: .right)
 
     // MARK: - Published state
-    @Published var crossfader: Double = 0.5  // 0.0=A, 0.5=centro, 1.0=B
+    @Published var crossfader: Double = 0.5
     @Published var masterVolume: Double = 0.8
     @Published var vuLevelA: Float = 0
     @Published var vuLevelB: Float = 0
@@ -21,24 +21,29 @@ final class AudioEngine: ObservableObject {
     // MARK: - Audio graph
     private let engine = AVAudioEngine()
 
-    // Deck A chain
     private var playerA   = AVAudioPlayerNode()
     private var pitchA    = AVAudioUnitTimePitch()
     private var eqA       = AVAudioUnitEQ(numberOfBands: 3)
     private var faderA    = AVAudioMixerNode()
 
-    // Deck B chain
     private var playerB   = AVAudioPlayerNode()
     private var pitchB    = AVAudioUnitTimePitch()
     private var eqB       = AVAudioUnitEQ(numberOfBands: 3)
     private var faderB    = AVAudioMixerNode()
 
-    // Master
     private var masterMixer: AVAudioMixerNode { engine.mainMixerNode }
 
-    // Archivo activo por deck (para loops sample-accurate)
+    // Archivo activo por deck
     private var fileA: AVAudioFile?
     private var fileB: AVAudioFile?
+
+    // Frame en el que se pausó (para reanudar desde ahí)
+    private var pauseFrameA: AVAudioFramePosition = 0
+    private var pauseFrameB: AVAudioFramePosition = 0
+
+    // Frame en el que empezó el segmento actual (para calcular posición)
+    private var segmentStartFrameA: AVAudioFramePosition = 0
+    private var segmentStartFrameB: AVAudioFramePosition = 0
 
     private var cancellables = Set<AnyCancellable>()
     private var timerA: AnyCancellable?
@@ -52,90 +57,73 @@ final class AudioEngine: ObservableObject {
         startEngine()
     }
 
-    // MARK: - Construir grafo de audio
+    // MARK: - Grafo de audio
 
     private func buildGraph() {
-        // Adjuntar todos los nodos
-        for node in [playerA, pitchA, eqA, faderA] as [AVAudioNode] {
-            engine.attach(node)
-        }
-        for node in [playerB, pitchB, eqB, faderB] as [AVAudioNode] {
-            engine.attach(node)
-        }
+        for node in [playerA, pitchA, eqA, faderA] as [AVAudioNode] { engine.attach(node) }
+        for node in [playerB, pitchB, eqB, faderB] as [AVAudioNode] { engine.attach(node) }
 
-        // Cadena Deck A: player → timePitch → EQ → fader → master
-        engine.connect(playerA, to: pitchA,   format: nil)
-        engine.connect(pitchA,  to: eqA,      format: nil)
-        engine.connect(eqA,     to: faderA,   format: nil)
+        engine.connect(playerA, to: pitchA,      format: nil)
+        engine.connect(pitchA,  to: eqA,         format: nil)
+        engine.connect(eqA,     to: faderA,      format: nil)
         engine.connect(faderA,  to: masterMixer, format: nil)
 
-        // Cadena Deck B
-        engine.connect(playerB, to: pitchB,   format: nil)
-        engine.connect(pitchB,  to: eqB,      format: nil)
-        engine.connect(eqB,     to: faderB,   format: nil)
+        engine.connect(playerB, to: pitchB,      format: nil)
+        engine.connect(pitchB,  to: eqB,         format: nil)
+        engine.connect(eqB,     to: faderB,      format: nil)
         engine.connect(faderB,  to: masterMixer, format: nil)
 
-        // TimePitch: rate cambia tempo, pitch = 0 para no cambiar tono
         pitchA.pitch = 0
         pitchB.pitch = 0
 
-        // Configurar EQ como isolator DJ profesional
         configureIsolator(eqA)
         configureIsolator(eqB)
 
-        // Volumen master
         masterMixer.outputVolume = Float(masterVolume)
+        faderA.outputVolume = 1.0
+        faderB.outputVolume = 1.0
     }
 
-    /// EQ Isolator de 3 bandas estilo DJ:
-    /// - LOW shelf  ≤ 200 Hz  → boost/cut ±20 dB, kill = -96 dB
-    /// - MID peaking 1 kHz   → boost/cut ±20 dB, kill = -96 dB
-    /// - HIGH shelf ≥ 8 kHz  → boost/cut ±20 dB, kill = -96 dB
+    /// EQ Isolator DJ 3 bandas: LOW shelf 200Hz / MID parametric 1kHz / HIGH shelf 8kHz
     private func configureIsolator(_ eq: AVAudioUnitEQ) {
-        // LOW shelf
-        eq.bands[0].filterType  = .lowShelf
-        eq.bands[0].frequency   = 200
-        eq.bands[0].gain        = 0
-        eq.bands[0].bypass      = false
+        eq.bands[0].filterType = .lowShelf
+        eq.bands[0].frequency  = 200
+        eq.bands[0].gain       = 0
+        eq.bands[0].bypass     = false
 
-        // MID parametric (ancho de octava = 1.5 para cubrir bien medios)
-        eq.bands[1].filterType  = .parametric
-        eq.bands[1].frequency   = 1000
-        eq.bands[1].bandwidth   = 1.5
-        eq.bands[1].gain        = 0
-        eq.bands[1].bypass      = false
+        eq.bands[1].filterType = .parametric
+        eq.bands[1].frequency  = 1000
+        eq.bands[1].bandwidth  = 1.5
+        eq.bands[1].gain       = 0
+        eq.bands[1].bypass     = false
 
-        // HIGH shelf
-        eq.bands[2].filterType  = .highShelf
-        eq.bands[2].frequency   = 8000
-        eq.bands[2].gain        = 0
-        eq.bands[2].bypass      = false
+        eq.bands[2].filterType = .highShelf
+        eq.bands[2].frequency  = 8000
+        eq.bands[2].gain       = 0
+        eq.bands[2].bypass     = false
     }
 
     private func startEngine() {
         do {
             try engine.start()
+            print("[AudioEngine] Motor iniciado OK")
         } catch {
             print("[AudioEngine] Error al iniciar: \(error)")
         }
     }
 
-    // MARK: - Observar cambios de estado
+    // MARK: - Observadores de estado
 
     private func observeDeckChanges() {
-        // Master volume
         $masterVolume
-            .sink { [weak self] v in
-                self?.masterMixer.outputVolume = Float(v)
-            }
+            .sink { [weak self] v in self?.masterMixer.outputVolume = Float(v) }
             .store(in: &cancellables)
 
-        // Crossfader → volúmenes de fader A y B (curva constante-power)
         $crossfader
             .sink { [weak self] v in self?.applyCrossfader(v) }
             .store(in: &cancellables)
 
-        // EQ Deck A — knob -1.0…+1.0 → dB -20…+20, kill (-1.0) → -96 dB
+        // EQ Deck A
         deckA.$eqLow.sink  { [weak self] v in self?.eqA.bands[0].gain = Self.eqGain(v) }.store(in: &cancellables)
         deckA.$eqMid.sink  { [weak self] v in self?.eqA.bands[1].gain = Self.eqGain(v) }.store(in: &cancellables)
         deckA.$eqHigh.sink { [weak self] v in self?.eqA.bands[2].gain = Self.eqGain(v) }.store(in: &cancellables)
@@ -145,51 +133,33 @@ final class AudioEngine: ObservableObject {
         deckB.$eqMid.sink  { [weak self] v in self?.eqB.bands[1].gain = Self.eqGain(v) }.store(in: &cancellables)
         deckB.$eqHigh.sink { [weak self] v in self?.eqB.bands[2].gain = Self.eqGain(v) }.store(in: &cancellables)
 
-        // Tempo Deck A → pitchA.rate (cambia tempo sin cambiar pitch)
-        deckA.$tempo.sink { [weak self] v in
-            self?.pitchA.rate = Float(v)
-        }.store(in: &cancellables)
+        // Tempo → TimePitch.rate
+        deckA.$tempo.sink { [weak self] v in self?.pitchA.rate = Float(v) }.store(in: &cancellables)
+        deckB.$tempo.sink { [weak self] v in self?.pitchB.rate = Float(v) }.store(in: &cancellables)
 
-        // Tempo Deck B
-        deckB.$tempo.sink { [weak self] v in
-            self?.pitchB.rate = Float(v)
-        }.store(in: &cancellables)
-
-        // Volume faders de cada deck
-        deckA.$volume.sink { [weak self] v in
-            self?.updateFaderVolume(deck: .left)
-        }.store(in: &cancellables)
-        deckB.$volume.sink { [weak self] v in
-            self?.updateFaderVolume(deck: .right)
-        }.store(in: &cancellables)
+        // Volume fader de cada deck
+        deckA.$volume.sink { [weak self] v in self?.updateFaderVolume(deck: .left)  }.store(in: &cancellables)
+        deckB.$volume.sink { [weak self] v in self?.updateFaderVolume(deck: .right) }.store(in: &cancellables)
     }
 
-    /// Convierte knob -1.0…+1.0 a dB:
-    /// -1.0 = kill (-96 dB), 0.0 = flat (0 dB), +1.0 = boost (+20 dB)
+    /// knob -1.0…+1.0 → dB: kill (-96) / flat (0) / boost (+20)
     private static func eqGain(_ knob: Double) -> Float {
-        if knob <= -0.98 { return -96 }          // kill total
-        if knob < 0 { return Float(knob * 20) }  // -20…0 dB
-        return Float(knob * 20)                   // 0…+20 dB
+        if knob <= -0.98 { return -96 }
+        return Float(knob * 20)
     }
 
-    // MARK: - Crossfader constante-power (curva DJ profesional)
+    // MARK: - Crossfader constante-power
 
     private func applyCrossfader(_ x: Double) {
-        // Curva constante-power: sin²(θ) + cos²(θ) = 1
-        // x = 0.0 → solo A, x = 0.5 → ambos al mismo nivel, x = 1.0 → solo B
         let angle = x * .pi / 2.0
-        let gainA = Float(cos(angle))
-        let gainB = Float(sin(angle))
-
-        updateFaderVolume(deck: .left,  crossGain: gainA)
-        updateFaderVolume(deck: .right, crossGain: gainB)
+        updateFaderVolume(deck: .left,  crossGain: Float(cos(angle)))
+        updateFaderVolume(deck: .right, crossGain: Float(sin(angle)))
     }
 
     private func updateFaderVolume(deck: DeckID, crossGain: Float? = nil) {
         let deckState = deck == .left ? deckA : deckB
         let fader     = deck == .left ? faderA : faderB
 
-        // Si no se pasa crossGain, recalcular desde el crossfader actual
         let cg: Float
         if let g = crossGain {
             cg = g
@@ -197,7 +167,6 @@ final class AudioEngine: ObservableObject {
             let angle = crossfader * .pi / 2.0
             cg = deck == .left ? Float(cos(angle)) : Float(sin(angle))
         }
-
         fader.outputVolume = Float(deckState.volume) * cg
     }
 
@@ -207,28 +176,30 @@ final class AudioEngine: ObservableObject {
         let player    = deck == .left ? playerA : playerB
         let deckState = deck == .left ? deckA   : deckB
 
+        // Detener reproducción anterior
         if player.isPlaying { player.stop() }
         stopTimer(deck: deck)
 
+        // Resetear posición de pausa
+        if deck == .left { pauseFrameA = 0; segmentStartFrameA = 0 }
+        else             { pauseFrameB = 0; segmentStartFrameB = 0 }
+
         do {
             let file = try AVAudioFile(forReading: track.url)
+            if deck == .left { fileA = file } else { fileB = file }
 
-            if deck == .left  { fileA = file }
-            else              { fileB = file }
-
-            player.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    deckState.isPlaying = false
-                    self.stopTimer(deck: deck)
-                }
-            }
+            // Programar desde el inicio
+            scheduleFrom(frame: 0, deck: deck, file: file, autoPlay: false)
 
             deckState.track       = track
             deckState.currentTime = 0
             deckState.isPlaying   = false
             deckState.isLooping   = false
+            deckState.loopStart   = 0
+            deckState.loopEnd     = 0
+            deckState.cuePoint    = nil
 
+            print("[AudioEngine] Cargado \(track.title) en deck \(deck.rawValue)")
         } catch {
             print("[AudioEngine] Error cargando \(track.title): \(error)")
         }
@@ -238,16 +209,37 @@ final class AudioEngine: ObservableObject {
         let player    = deck == .left ? playerA : playerB
         let deckState = deck == .left ? deckA   : deckB
 
-        guard deckState.track != nil else { return }
+        guard deckState.track != nil else {
+            print("[AudioEngine] togglePlay: no hay track en deck \(deck.rawValue)")
+            return
+        }
 
         if deckState.isPlaying {
+            // PAUSE — guardar frame actual para poder reanudar
+            let pauseFrame = currentFrame(deck: deck)
+            if deck == .left { pauseFrameA = pauseFrame }
+            else             { pauseFrameB = pauseFrame }
+
             player.pause()
             stopTimer(deck: deck)
             deckState.isPlaying = false
+            print("[AudioEngine] Pausa deck \(deck.rawValue) en frame \(pauseFrame)")
         } else {
+            // PLAY / RESUME
+            let file = deck == .left ? fileA : fileB
+            guard let file else { return }
+
+            let resumeFrame = deck == .left ? pauseFrameA : pauseFrameB
+
+            if resumeFrame > 0 {
+                // Reanudar desde donde se pausó
+                scheduleFrom(frame: resumeFrame, deck: deck, file: file, autoPlay: false)
+            }
+
             player.play()
             startTimer(deck: deck)
             deckState.isPlaying = true
+            print("[AudioEngine] Play deck \(deck.rawValue) desde frame \(resumeFrame)")
         }
     }
 
@@ -258,57 +250,63 @@ final class AudioEngine: ObservableObject {
 
         guard let file, deckState.track != nil else { return }
 
-        let wasPlaying = deckState.isPlaying
-        if wasPlaying { player.stop() }
-
         let sampleRate  = file.processingFormat.sampleRate
-        let startFrame  = AVAudioFramePosition(time * sampleRate)
+        let targetFrame = AVAudioFramePosition(max(0, time) * sampleRate)
         let totalFrames = file.length
-        guard startFrame < totalFrames else { return }
-        let frameCount  = AVAudioFrameCount(totalFrames - startFrame)
+        guard targetFrame < totalFrames else { return }
 
-        player.scheduleSegment(
-            file,
-            startingFrame: startFrame,
-            frameCount:    frameCount,
-            at:            nil,
-            completionCallbackType: .dataPlayedBack
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                deckState.isPlaying = false
-                self.stopTimer(deck: deck)
-            }
-        }
+        let wasPlaying = deckState.isPlaying
+
+        // Detener completamente para limpiar el schedule
+        player.stop()
+        stopTimer(deck: deck)
+
+        // Resetear frame de pausa
+        if deck == .left { pauseFrameA = targetFrame }
+        else             { pauseFrameB = targetFrame }
+
+        scheduleFrom(frame: targetFrame, deck: deck, file: file, autoPlay: false)
 
         deckState.currentTime = time
+
         if wasPlaying {
             player.play()
-            // Reiniciar timer para que lastRenderTime sea válido desde 0
-            stopTimer(deck: deck)
             startTimer(deck: deck)
+            deckState.isPlaying = true
         }
     }
 
+    // MARK: - Sync BPM
+
     func sync(slave: DeckID) {
-        let master    = slave == .left ? deckB : deckA
+        let master     = slave == .left ? deckB : deckA
         let slaveState = slave == .left ? deckA : deckB
 
         guard let masterBPM = master.track?.bpm,
               let slaveBPM  = slaveState.track?.bpm,
-              slaveBPM > 0 else { return }
+              slaveBPM > 0 else {
+            print("[AudioEngine] sync: no hay BPM disponible")
+            return
+        }
 
         slaveState.tempo = masterBPM / slaveBPM
+        print("[AudioEngine] Sync: deck \(slave.rawValue) → \(String(format: "%.2f", slaveState.tempo))x")
     }
+
+    // MARK: - Cue
 
     func setCue(deck: DeckID) {
         let d = deck == .left ? deckA : deckB
         d.cuePoint = d.currentTime
+        print("[AudioEngine] Cue marcado en \(d.currentTime)s deck \(deck.rawValue)")
     }
 
     func jumpToCue(deck: DeckID) {
         let d = deck == .left ? deckA : deckB
-        guard let cue = d.cuePoint else { return }
+        guard let cue = d.cuePoint else {
+            print("[AudioEngine] jumpToCue: sin cue en deck \(deck.rawValue)")
+            return
+        }
         seek(to: cue, deck: deck)
     }
 
@@ -320,67 +318,109 @@ final class AudioEngine: ObservableObject {
 
         if d.isLooping {
             d.isLooping = false
+            print("[AudioEngine] Loop OFF deck \(deck.rawValue)")
         } else {
-            // Crear loop de 4 beats si no hay uno definido
             if d.loopEnd <= d.loopStart {
-                let beatDuration = track.bpm.map { 60.0 / $0 } ?? 0.5
+                let beatDuration = track.bpm != nil ? (60.0 / track.bpm!) : 0.5
                 d.loopStart = d.currentTime
                 d.loopEnd   = min(d.currentTime + beatDuration * 4, track.duration)
             }
             d.isLooping = true
+            print("[AudioEngine] Loop ON: \(String(format: "%.2f", d.loopStart))s → \(String(format: "%.2f", d.loopEnd))s")
         }
     }
 
     func scaleLoop(deck: DeckID, factor: Double) {
         let d = deck == .left ? deckA : deckB
         guard let duration = d.track?.duration else { return }
-        let length    = d.loopEnd - d.loopStart
-        d.loopEnd     = min(d.loopStart + length * factor, duration)
+        let length = d.loopEnd - d.loopStart
+        d.loopEnd = min(d.loopStart + length * factor, duration)
     }
 
-    // MARK: - Timer de progreso + loop handler
+    // MARK: - Helpers internos
+
+    /// Programa un segmento desde un frame concreto hasta el final del archivo
+    private func scheduleFrom(frame: AVAudioFramePosition, deck: DeckID, file: AVAudioFile, autoPlay: Bool) {
+        let player     = deck == .left ? playerA : playerB
+        let deckState  = deck == .left ? deckA   : deckB
+        let totalFrames = file.length
+        guard frame < totalFrames else { return }
+        let frameCount = AVAudioFrameCount(totalFrames - frame)
+
+        if deck == .left { segmentStartFrameA = frame }
+        else             { segmentStartFrameB = frame }
+
+        player.scheduleSegment(
+            file,
+            startingFrame: frame,
+            frameCount:    frameCount,
+            at:            nil,
+            completionCallbackType: .dataPlayedBack
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Solo marcar como terminado si no estamos en loop
+                if !deckState.isLooping {
+                    deckState.isPlaying = false
+                    if deck == .left { self.pauseFrameA = 0 }
+                    else             { self.pauseFrameB = 0 }
+                    self.stopTimer(deck: deck)
+                    print("[AudioEngine] Fin de pista deck \(deck.rawValue)")
+                }
+            }
+        }
+    }
+
+    /// Devuelve el frame actual del PlayerNode (posición real en el archivo)
+    private func currentFrame(deck: DeckID) -> AVAudioFramePosition {
+        let player       = deck == .left ? playerA : playerB
+        let segmentStart = deck == .left ? segmentStartFrameA : segmentStartFrameB
+
+        guard let nodeTime   = player.lastRenderTime,
+              let playerTime = player.playerTime(forNodeTime: nodeTime) else {
+            // Sin render time todavía: devolver el frame de inicio del segmento
+            return segmentStart
+        }
+        return segmentStart + playerTime.sampleTime
+    }
+
+    // MARK: - Timer de progreso
 
     private func startTimer(deck: DeckID) {
-        let interval: TimeInterval = 0.02
-        let timer = Timer.publish(every: interval, on: .main, in: .common)
+        stopTimer(deck: deck)   // evitar timers duplicados
+
+        let timer = Timer.publish(every: 0.05, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
                 let d      = deck == .left ? self.deckA : self.deckB
-                let player = deck == .left ? self.playerA : self.playerB
                 let fader  = deck == .left ? self.faderA : self.faderB
+                let file   = deck == .left ? self.fileA  : self.fileB
 
-                guard let duration = d.track?.duration else { return }
+                guard let file, let duration = d.track?.duration else { return }
 
-                // Leer posición real del PlayerNode para máxima precisión
-                if let nodeTime = player.lastRenderTime,
-                   let playerTime = player.playerTime(forNodeTime: nodeTime) {
-                    let file = deck == .left ? self.fileA : self.fileB
-                    if let file {
-                        let sampleRate = file.processingFormat.sampleRate
-                        // sampleTime puede ser negativo justo al inicio, protegemos
-                        let sampleTime = max(0, playerTime.sampleTime)
-                        d.currentTime = min(Double(sampleTime) / sampleRate, duration)
-                    }
-                } else {
-                    // Fallback si el nodo aún no ha renderizado: avanzar por intervalo
-                    d.currentTime = min(d.currentTime + interval, duration)
-                }
+                // Calcular tiempo desde frame real
+                let frame      = self.currentFrame(deck: deck)
+                let sampleRate = file.processingFormat.sampleRate
+                let realTime   = Double(frame) / sampleRate
+                d.currentTime  = min(realTime, duration)
 
-                // Loop: volver al inicio cuando llegamos al final del loop
+                // Loop
                 if d.isLooping && d.currentTime >= d.loopEnd {
                     self.seek(to: d.loopStart, deck: deck)
                     return
                 }
 
-                if d.currentTime >= duration {
-                    d.isPlaying = false
+                // Fin de pista
+                if d.currentTime >= duration - 0.1 && !d.isLooping {
+                    d.isPlaying   = false
+                    d.currentTime = duration
                     self.stopTimer(deck: deck)
                     return
                 }
 
-                // VU meters: outputVolume del fader como proxy de nivel
-                let level = fader.outputVolume * Float(d.isPlaying ? Double.random(in: 0.65...1.0) : 0)
+                // VU meter
+                let level = fader.outputVolume * Float(d.isPlaying ? Double.random(in: 0.6...1.0) : 0)
                 if deck == .left { self.vuLevelA = level }
                 else             { self.vuLevelB = level }
             }
@@ -389,12 +429,7 @@ final class AudioEngine: ObservableObject {
     }
 
     private func stopTimer(deck: DeckID) {
-        if deck == .left {
-            timerA    = nil
-            vuLevelA  = 0
-        } else {
-            timerB    = nil
-            vuLevelB  = 0
-        }
+        if deck == .left { timerA = nil; vuLevelA = 0 }
+        else             { timerB = nil; vuLevelB = 0 }
     }
 }
