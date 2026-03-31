@@ -62,7 +62,7 @@ struct EQKnob: View {
                         }
                         // Delta desde el inicio del gesto — sin acumulación
                         let deltaY = dragStartY - drag.location.y
-                        let newValue = valueAtDragStart + Double(deltaY) / 80.0
+                        let newValue = valueAtDragStart + Double(deltaY) / 60.0
                         value = max(-1.0, min(1.0, newValue))
                     }
                     .onEnded { _ in

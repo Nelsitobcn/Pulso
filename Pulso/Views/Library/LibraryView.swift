@@ -203,6 +203,14 @@ struct LibraryTrackRow: View {
         .background(isHovered ? Color.white.opacity(0.05) : Color.clear)
         .cornerRadius(6)
         .onHover { isHovered = $0 }
+        // Doble clic → carga en el deck libre (A si vacío, si no B)
+        .onTapGesture(count: 2) {
+            if audioEngine.deckA.track == nil {
+                audioEngine.load(track: track, into: .left)
+            } else {
+                audioEngine.load(track: track, into: .right)
+            }
+        }
         .contextMenu {
             Button("Cargar en Deck A") {
                 audioEngine.load(track: track, into: .left)
@@ -211,7 +219,6 @@ struct LibraryTrackRow: View {
                 audioEngine.load(track: track, into: .right)
             }
         }
-        // Drag para soltar en un deck — provee fileURL compatible con onDrop del deck
         .onDrag {
             NSItemProvider(object: track.url as NSURL)
         }

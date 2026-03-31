@@ -249,11 +249,15 @@ final class AudioEngine: ObservableObject {
 
         if deckState.isPlaying {
             // ── PAUSA ──
-            // Guardar frame exacto antes de detener
             let frame = liveFrame(deck: deck)
             if deck == .left { pausedAtA = frame } else { pausedAtB = frame }
 
-            player.stop()          // stop limpia el schedule; pause() no para de verdad
+            player.stop()
+            // Desconectar y reconectar el fader para limpiar buffers pendientes
+            engine.disconnectNodeOutput(player)
+            let pitch = deck == .left ? pitchA : pitchB
+            engine.connect(player, to: pitch, format: nil)
+
             stopTimer(deck: deck)
             deckState.isPlaying = false
             print("[AudioEngine] ⏸ Deck \(deck.rawValue) pausado en frame \(frame)")
