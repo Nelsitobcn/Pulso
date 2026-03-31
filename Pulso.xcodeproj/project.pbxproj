@@ -1,0 +1,607 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		05D79F1A64133D932772B260 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8236C939D512E4F41F901C83 /* SettingsView.swift */; };
+		082CEA6CFA785BF9B98A7499 /* PulsoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6473E4169BDDA444411FE978 /* PulsoApp.swift */; };
+		0B8AF121B1468B769BCE60C5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 60D48E68275DA49116EBC6A2 /* Assets.xcassets */; };
+		0F1F35AE043D3CF6F906C094 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E5E21D4D210CC88810826FE /* ContentView.swift */; };
+		12B484392CE2A53C61C4A24D /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
+		1766E8CFD2F0576A131600CE /* DeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */; };
+		26821B50E7919303759F9083 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA178B499D53592DEFA10D25 /* AuthService.swift */; };
+		320604246522AE05D48861D0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8236C939D512E4F41F901C83 /* SettingsView.swift */; };
+		378E950FF68FEB288C190A3C /* TurntableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA72FF8502521A96F5EA0F35 /* TurntableView.swift */; };
+		40708D1D4CBBA523EFAC1459 /* DeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */; };
+		496D04F5C5D48B8327937245 /* DeckState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 297EA09A864DF9450FF9546B /* DeckState.swift */; };
+		53AE6F640F0BCB770FC1BF37 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
+		556C9F27E9B010B3B8C95E0A /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411EF2E560DB7B1047A38187 /* AudioEngine.swift */; };
+		5A02530A377ACAFE5DCAC647 /* PulsoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6473E4169BDDA444411FE978 /* PulsoApp.swift */; };
+		64B61280810F807CED4B0931 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E5E21D4D210CC88810826FE /* ContentView.swift */; };
+		6AABF702C0DFE01D53AB8123 /* DeckState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 297EA09A864DF9450FF9546B /* DeckState.swift */; };
+		7584B568FBA9280759BF1B90 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA79F8FEB8B728D87F5720E /* LibraryView.swift */; };
+		796864AE8CDAA7F220DEF0BD /* EQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A948DE4CE18404260A9E357 /* EQView.swift */; };
+		7BD8319F2F800D4BA5C9B253 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA79F8FEB8B728D87F5720E /* LibraryView.swift */; };
+		82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
+		8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
+		9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
+		A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B91547CC68CB6AB7492D15 /* TopBarView.swift */; };
+		A1907425604B3FE06C79961A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
+		A8F32EA969558D4A555AA032 /* TurntableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA72FF8502521A96F5EA0F35 /* TurntableView.swift */; };
+		AB73C26E970E992033474A82 /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
+		B61692FAB12227CC8699FF97 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B91547CC68CB6AB7492D15 /* TopBarView.swift */; };
+		B90EDD594F6A59015758CB63 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
+		BB8081479D7F744AD98B386F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 60D48E68275DA49116EBC6A2 /* Assets.xcassets */; };
+		BBFC1A117BA4EBEFDE0EDDE6 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
+		BD5D5ABA53ECB032F8A7C7FD /* EQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A948DE4CE18404260A9E357 /* EQView.swift */; };
+		BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411EF2E560DB7B1047A38187 /* AudioEngine.swift */; };
+		C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
+		CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
+		D1167B4DC0B49BFB5F7FD614 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
+		D1202606418785E211CA874B /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
+		DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
+		FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA178B499D53592DEFA10D25 /* AuthService.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenterControlsView.swift; sourceTree = "<group>"; };
+		297EA09A864DF9450FF9546B /* DeckState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckState.swift; sourceTree = "<group>"; };
+		2DA79F8FEB8B728D87F5720E /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		2E5E21D4D210CC88810826FE /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4025F6E1D12DE7F0495E0039 /* Pulso.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pulso.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		411EF2E560DB7B1047A38187 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
+		52794CFBE0F6E6538CCA811D /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		5A668A5FF3746B5387DC0C94 /* Track.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Track.swift; sourceTree = "<group>"; };
+		5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryService.swift; sourceTree = "<group>"; };
+		60D48E68275DA49116EBC6A2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6473E4169BDDA444411FE978 /* PulsoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulsoApp.swift; sourceTree = "<group>"; };
+		8236C939D512E4F41F901C83 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		9A948DE4CE18404260A9E357 /* EQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQView.swift; sourceTree = "<group>"; };
+		B4B224FA76EEF28A68714440 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		BA72FF8502521A96F5EA0F35 /* TurntableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurntableView.swift; sourceTree = "<group>"; };
+		D2257B39832162A06644607F /* MainDJView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDJView.swift; sourceTree = "<group>"; };
+		D50C755F757450A628F87FD9 /* MixSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixSession.swift; sourceTree = "<group>"; };
+		DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckView.swift; sourceTree = "<group>"; };
+		EC039E9801B84A3FEA3D4DC3 /* Pulso.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pulso.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F2B91547CC68CB6AB7492D15 /* TopBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopBarView.swift; sourceTree = "<group>"; };
+		F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackAnalyzer.swift; sourceTree = "<group>"; };
+		FA178B499D53592DEFA10D25 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		13A5A59CD73DA3313E33C0B7 = {
+			isa = PBXGroup;
+			children = (
+				5BE8A8FCA6B06B7FA98C1BA8 /* Pulso */,
+				9C4804EBB9E374383A5BB6E3 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2858BE0B0BEE5FA57E3F5C9B /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				411EF2E560DB7B1047A38187 /* AudioEngine.swift */,
+				F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
+		5BE8A8FCA6B06B7FA98C1BA8 /* Pulso */ = {
+			isa = PBXGroup;
+			children = (
+				B4B224FA76EEF28A68714440 /* Info.plist */,
+				ABB2AEC57470582004F46E8B /* App */,
+				816EF3C87D57F19B6F3ECA85 /* Models */,
+				5E51323F2628CEA360AA6F9D /* Resources */,
+				F066745CAB7349F07BFC2483 /* Services */,
+				B641B30D68BD5B624A76544B /* Views */,
+			);
+			path = Pulso;
+			sourceTree = "<group>";
+		};
+		5E51323F2628CEA360AA6F9D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				60D48E68275DA49116EBC6A2 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		816EF3C87D57F19B6F3ECA85 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				297EA09A864DF9450FF9546B /* DeckState.swift */,
+				D50C755F757450A628F87FD9 /* MixSession.swift */,
+				5A668A5FF3746B5387DC0C94 /* Track.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		8DC3EFA42C19B7764AF0E04B /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				2DA79F8FEB8B728D87F5720E /* LibraryView.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		95FBC66DDAA91DA63BD4C88C /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		9C4804EBB9E374383A5BB6E3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EC039E9801B84A3FEA3D4DC3 /* Pulso.app */,
+				4025F6E1D12DE7F0495E0039 /* Pulso.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ABB2AEC57470582004F46E8B /* App */ = {
+			isa = PBXGroup;
+			children = (
+				2E5E21D4D210CC88810826FE /* ContentView.swift */,
+				6473E4169BDDA444411FE978 /* PulsoApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B641B30D68BD5B624A76544B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				B846C8094C7BBF921C35D7E4 /* Decks */,
+				8DC3EFA42C19B7764AF0E04B /* Library */,
+				FF3DEAFAEA7AE48BD92EA2B1 /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		B846C8094C7BBF921C35D7E4 /* Decks */ = {
+			isa = PBXGroup;
+			children = (
+				0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */,
+				DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */,
+				9A948DE4CE18404260A9E357 /* EQView.swift */,
+				D2257B39832162A06644607F /* MainDJView.swift */,
+				F2B91547CC68CB6AB7492D15 /* TopBarView.swift */,
+				BA72FF8502521A96F5EA0F35 /* TurntableView.swift */,
+				52794CFBE0F6E6538CCA811D /* WaveformView.swift */,
+			);
+			path = Decks;
+			sourceTree = "<group>";
+		};
+		CB87E27A00369E61519B6F38 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				FA178B499D53592DEFA10D25 /* AuthService.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		F066745CAB7349F07BFC2483 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				2858BE0B0BEE5FA57E3F5C9B /* Audio */,
+				CB87E27A00369E61519B6F38 /* Auth */,
+				95FBC66DDAA91DA63BD4C88C /* Library */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		FF3DEAFAEA7AE48BD92EA2B1 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				8236C939D512E4F41F901C83 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		00CCCA07EC2D68935070C105 /* Pulso_macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C412DDF09862FA615264EE65 /* Build configuration list for PBXNativeTarget "Pulso_macOS" */;
+			buildPhases = (
+				5744AF531719EC728C321E0A /* Sources */,
+				FE5202A5F47E90D118F5ECC1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Pulso_macOS;
+			packageProductDependencies = (
+			);
+			productName = Pulso_macOS;
+			productReference = 4025F6E1D12DE7F0495E0039 /* Pulso.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8AD06FF975CE67F641429D66 /* Pulso_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E0215B25E631A049F0AE8B36 /* Build configuration list for PBXNativeTarget "Pulso_iOS" */;
+			buildPhases = (
+				FDADC53FB1C9CE4490097B70 /* Sources */,
+				46F6FF5E8EA91146AFA85157 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Pulso_iOS;
+			packageProductDependencies = (
+			);
+			productName = Pulso_iOS;
+			productReference = EC039E9801B84A3FEA3D4DC3 /* Pulso.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		76D95B2858E9E9604B709626 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					00CCCA07EC2D68935070C105 = {
+						DevelopmentTeam = "";
+					};
+					8AD06FF975CE67F641429D66 = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = CBB98D37B96C920B95742879 /* Build configuration list for PBXProject "Pulso" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 13A5A59CD73DA3313E33C0B7;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9C4804EBB9E374383A5BB6E3 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8AD06FF975CE67F641429D66 /* Pulso_iOS */,
+				00CCCA07EC2D68935070C105 /* Pulso_macOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		46F6FF5E8EA91146AFA85157 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0B8AF121B1468B769BCE60C5 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE5202A5F47E90D118F5ECC1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB8081479D7F744AD98B386F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5744AF531719EC728C321E0A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */,
+				26821B50E7919303759F9083 /* AuthService.swift in Sources */,
+				C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */,
+				64B61280810F807CED4B0931 /* ContentView.swift in Sources */,
+				6AABF702C0DFE01D53AB8123 /* DeckState.swift in Sources */,
+				40708D1D4CBBA523EFAC1459 /* DeckView.swift in Sources */,
+				796864AE8CDAA7F220DEF0BD /* EQView.swift in Sources */,
+				D1202606418785E211CA874B /* LibraryService.swift in Sources */,
+				7584B568FBA9280759BF1B90 /* LibraryView.swift in Sources */,
+				CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */,
+				A1907425604B3FE06C79961A /* MixSession.swift in Sources */,
+				082CEA6CFA785BF9B98A7499 /* PulsoApp.swift in Sources */,
+				05D79F1A64133D932772B260 /* SettingsView.swift in Sources */,
+				A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */,
+				B90EDD594F6A59015758CB63 /* Track.swift in Sources */,
+				AB73C26E970E992033474A82 /* TrackAnalyzer.swift in Sources */,
+				A8F32EA969558D4A555AA032 /* TurntableView.swift in Sources */,
+				D1167B4DC0B49BFB5F7FD614 /* WaveformView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FDADC53FB1C9CE4490097B70 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				556C9F27E9B010B3B8C95E0A /* AudioEngine.swift in Sources */,
+				FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */,
+				53AE6F640F0BCB770FC1BF37 /* CenterControlsView.swift in Sources */,
+				0F1F35AE043D3CF6F906C094 /* ContentView.swift in Sources */,
+				496D04F5C5D48B8327937245 /* DeckState.swift in Sources */,
+				1766E8CFD2F0576A131600CE /* DeckView.swift in Sources */,
+				BD5D5ABA53ECB032F8A7C7FD /* EQView.swift in Sources */,
+				12B484392CE2A53C61C4A24D /* LibraryService.swift in Sources */,
+				7BD8319F2F800D4BA5C9B253 /* LibraryView.swift in Sources */,
+				BBFC1A117BA4EBEFDE0EDDE6 /* MainDJView.swift in Sources */,
+				9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */,
+				5A02530A377ACAFE5DCAC647 /* PulsoApp.swift in Sources */,
+				320604246522AE05D48861D0 /* SettingsView.swift in Sources */,
+				B61692FAB12227CC8699FF97 /* TopBarView.swift in Sources */,
+				8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */,
+				82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */,
+				378E950FF68FEB288C190A3C /* TurntableView.swift in Sources */,
+				DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		09B120D85DA9E3D5C890540A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Pulso/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				NSMicrophoneUsageDescription = "Pulso necesita acceso al micrófono para la entrada de audio.";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nelsitobcn.pulso;
+				PRODUCT_NAME = Pulso;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.device.audio-input" = YES;
+				"com.apple.security.files.user-selected.read-write" = YES;
+			};
+			name = Release;
+		};
+		1B4C9F5FBB0807BD97BC9F1D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Pulso/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				NSMicrophoneUsageDescription = "Pulso necesita acceso al micrófono para la entrada de audio.";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nelsitobcn.pulso;
+				PRODUCT_NAME = Pulso;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.device.audio-input" = YES;
+				"com.apple.security.files.user-selected.read-write" = YES;
+			};
+			name = Debug;
+		};
+		55D3AE61F0CE5B068079A44E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		8083518B6078B13E0A499217 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Pulso/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				NSMicrophoneUsageDescription = "Pulso necesita acceso al micrófono para la entrada de audio.";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nelsitobcn.pulso;
+				PRODUCT_NAME = Pulso;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.device.audio-input" = YES;
+				"com.apple.security.files.user-selected.read-write" = YES;
+			};
+			name = Release;
+		};
+		CD3198712A9B3D122B16C553 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Pulso/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				NSMicrophoneUsageDescription = "Pulso necesita acceso al micrófono para la entrada de audio.";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nelsitobcn.pulso;
+				PRODUCT_NAME = Pulso;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.device.audio-input" = YES;
+				"com.apple.security.files.user-selected.read-write" = YES;
+			};
+			name = Debug;
+		};
+		D9B060480D622B63745737DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C412DDF09862FA615264EE65 /* Build configuration list for PBXNativeTarget "Pulso_macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B4C9F5FBB0807BD97BC9F1D /* Debug */,
+				8083518B6078B13E0A499217 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CBB98D37B96C920B95742879 /* Build configuration list for PBXProject "Pulso" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				55D3AE61F0CE5B068079A44E /* Debug */,
+				D9B060480D622B63745737DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E0215B25E631A049F0AE8B36 /* Build configuration list for PBXNativeTarget "Pulso_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CD3198712A9B3D122B16C553 /* Debug */,
+				09B120D85DA9E3D5C890540A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 76D95B2858E9E9604B709626 /* Project object */;
+}

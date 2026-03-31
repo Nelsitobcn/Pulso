@@ -1,0 +1,56 @@
+name: Pulso
+options:
+  bundleIdPrefix: com.nelsitobcn
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    DEVELOPMENT_TEAM: ""
+
+schemes:
+  Pulso (macOS):
+    build:
+      targets:
+        Pulso_macOS: all
+    run:
+      config: Debug
+  Pulso (iOS):
+    build:
+      targets:
+        Pulso_iOS: all
+    run:
+      config: Debug
+
+targets:
+  Pulso:
+    type: application
+    platform: [macOS, iOS]
+    deploymentTarget:
+      macOS: "14.0"
+      iOS: "17.0"
+    sources:
+      - path: Pulso
+        excludes:
+          - "**/*.md"
+    resources:
+      - path: Pulso/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nelsitobcn.pulso
+        PRODUCT_NAME: Pulso
+        INFOPLIST_FILE: Pulso/Info.plist
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        SWIFT_VERSION: "6.0"
+        # Permisos necesarios para acceso a archivos de música
+        NSMicrophoneUsageDescription: "Pulso necesita acceso al micrófono para la entrada de audio."
+        # macOS sandbox — acceso a carpetas de música
+        com.apple.security.app-sandbox: YES
+        com.apple.security.files.user-selected.read-write: YES
+        com.apple.security.device.audio-input: YES
