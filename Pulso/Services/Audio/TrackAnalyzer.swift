@@ -84,6 +84,9 @@ actor TrackAnalyzer {
 
         var windowStart = 0
         var windowCount = 0
+        let log2n = vDSP_Length(log2(Double(windowSize)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else { return nil }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
 
         while windowStart + windowSize <= frameCount {
             let slice = Array(UnsafeBufferPointer(start: channelData + windowStart, count: windowSize))
@@ -95,12 +98,6 @@ actor TrackAnalyzer {
             vDSP_vmul(slice, 1, hannWindow, 1, &windowed, 1, vDSP_Length(windowSize))
 
             // FFT
-            let log2n = vDSP_Length(log2(Double(windowSize)))
-            guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
-                windowStart += hopSize
-                continue
-            }
-
             var real = windowed
             var imag = [Float](repeating: 0, count: windowSize)
             var magnitudes = [Float](repeating: 0, count: windowSize / 2)
@@ -114,7 +111,6 @@ actor TrackAnalyzer {
                     }
                 }
             }
-            vDSP_destroy_fftsetup(fftSetup)
 
             // Mapear frecuencias a clases de pitch (chroma)
             for bin in 1..<(windowSize / 2) {

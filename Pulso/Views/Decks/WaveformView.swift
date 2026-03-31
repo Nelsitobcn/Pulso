@@ -42,12 +42,12 @@ struct WaveformView: View {
                     .frame(width: 2)
                     .offset(x: geo.size.width * deck.progress - 1)
 
-                // Marcador de cue
-                if let cue = deck.cuePoint,
-                   let dur = deck.track?.duration, dur > 0 {
-                    Color.yellow
-                        .frame(width: 2)
-                        .offset(x: geo.size.width * (cue / dur) - 1)
+                if let dur = deck.track?.duration, dur > 0 {
+                    ForEach(deck.hotCues) { cue in
+                        cue.color.swiftUIColor
+                            .frame(width: 3)
+                            .offset(x: geo.size.width * (cue.time / dur) - 1)
+                    }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -58,6 +58,20 @@ struct WaveformView: View {
                         onSeek(max(0, min(1, Double(v.location.x / geo.size.width))))
                     }
             )
+        }
+    }
+}
+
+extension HotCueColor {
+    var swiftUIColor: Color {
+        switch self {
+        case .red: return .red
+        case .orange: return .orange
+        case .yellow: return .yellow
+        case .green: return .green
+        case .blue: return .blue
+        case .purple: return .purple
+        case .pink: return .pink
         }
     }
 }

@@ -1,9 +1,38 @@
 import AVFoundation
+import Accelerate
 import Combine
 import SwiftUI
 
 @MainActor
 final class AudioEngine: ObservableObject {
+    private struct DeckSnapshot: Codable {
+        var trackID: UUID?
+        var currentTime: TimeInterval
+        var tempo: Double
+        var volume: Double
+        var eqLow: Double
+        var eqMid: Double
+        var eqHigh: Double
+        var isLooping: Bool
+        var loopStart: TimeInterval
+        var loopEnd: TimeInterval
+        var keyLock: Bool
+        var hotCues: [HotCue]
+    }
+
+    private struct SessionSnapshot: Codable {
+        var crossfader: Double
+        var masterVolume: Double
+        var deckA: DeckSnapshot
+        var deckB: DeckSnapshot
+    }
+
+    private enum DeckChannel {
+        case left
+        case right
+    }
+
+    private let sessionStorageKey = "pulso_session_snapshot"
 
     // MARK: - Decks
     let deckA = DeckState(id: .left)
@@ -50,6 +79,9 @@ final class AudioEngine: ObservableObject {
     init() {
         // Orden obligatorio: grafo → engine arranca → observadores
         setupGraph()
+        #if os(iOS)
+        applyAudioLatencySetting()
+        #endif
         guard (try? engine.start()) != nil else {
             print("[AudioEngine] ❌ No se pudo iniciar el engine")
             return
@@ -91,6 +123,9 @@ final class AudioEngine: ObservableObject {
         let initialGain = Float(cos(Double.pi / 4))
         faderA.outputVolume = initialGain
         faderB.outputVolume = initialGain
+
+        installVUMeterTap(on: faderA, deck: .left)
+        installVUMeterTap(on: faderB, deck: .right)
     }
 
     private func setupEQ(_ eq: AVAudioUnitEQ) {
@@ -124,13 +159,8 @@ final class AudioEngine: ObservableObject {
 
         // Crossfader
         $crossfader
-            .sink { [weak self] x in
-                guard let self else { return }
-                let angle = x * .pi / 2
-                let gainA = Float(cos(angle))
-                let gainB = Float(sin(angle))
-                self.faderA.outputVolume = Float(self.deckA.volume) * gainA
-                self.faderB.outputVolume = Float(self.deckB.volume) * gainB
+            .sink { [weak self] _ in
+                self?.refreshFaders()
             }
             .store(in: &cancellables)
 
@@ -145,8 +175,10 @@ final class AudioEngine: ObservableObject {
         deckB.$eqHigh.sink { [weak self] v in self?.eqB.bands[2].gain = Self.knobToGain(v) }.store(in: &cancellables)
 
         // Tempo → rate del TimePitch
-        deckA.$tempo.sink { [weak self] v in self?.pitchA.rate = Float(v) }.store(in: &cancellables)
-        deckB.$tempo.sink { [weak self] v in self?.pitchB.rate = Float(v) }.store(in: &cancellables)
+        deckA.$tempo.sink { [weak self] _ in self?.updateTimePitch(for: .left) }.store(in: &cancellables)
+        deckB.$tempo.sink { [weak self] _ in self?.updateTimePitch(for: .right) }.store(in: &cancellables)
+        deckA.$keyLock.sink { [weak self] _ in self?.updateTimePitch(for: .left) }.store(in: &cancellables)
+        deckB.$keyLock.sink { [weak self] _ in self?.updateTimePitch(for: .right) }.store(in: &cancellables)
 
         // Volume de deck → fader (recalculando con crossfader)
         deckA.$volume.sink { [weak self] _ in self?.refreshFaders() }.store(in: &cancellables)
@@ -159,9 +191,27 @@ final class AudioEngine: ObservableObject {
     }
 
     private func refreshFaders() {
-        let angle = crossfader * .pi / 2
-        faderA.outputVolume = Float(deckA.volume) * Float(cos(angle))
-        faderB.outputVolume = Float(deckB.volume) * Float(sin(angle))
+        let curve = UserDefaults.standard.string(forKey: "pulso_crossfade_curve") ?? "linear"
+        let x = crossfader
+        let gainA: Float
+        let gainB: Float
+
+        switch curve {
+        case "scurve":
+            let smooth = x * x * (3 - 2 * x)
+            let angle = smooth * .pi / 2
+            gainA = Float(cos(angle))
+            gainB = Float(sin(angle))
+        case "cut":
+            gainA = x < 0.5 ? 1 : 0
+            gainB = x >= 0.5 ? 1 : 0
+        default:
+            gainA = Float(1.0 - x)
+            gainB = Float(x)
+        }
+
+        faderA.outputVolume = Float(deckA.volume) * gainA
+        faderB.outputVolume = Float(deckB.volume) * gainB
     }
 
     // MARK: - API pública
@@ -186,8 +236,9 @@ final class AudioEngine: ObservableObject {
             deckState.isLooping   = false
             deckState.loopStart   = 0
             deckState.loopEnd     = 0
-            deckState.cuePoint    = nil
+            deckState.hotCues     = []
             print("[AudioEngine] ✅ Cargado '\(track.title)' en deck \(deck.rawValue)")
+            saveSession()
         } catch {
             print("[AudioEngine] ❌ Error cargando \(track.title): \(error)")
         }
@@ -208,6 +259,7 @@ final class AudioEngine: ObservableObject {
             stopTimer(deck: deck)
             deckState.isPlaying = false
             print("[AudioEngine] ⏸ Deck \(deck.rawValue) pausado en frame \(frame)")
+            saveSession()
 
         } else {
             // ── PLAY / REANUDAR ──
@@ -220,6 +272,7 @@ final class AudioEngine: ObservableObject {
             startTimer(deck: deck)
             deckState.isPlaying = true
             print("[AudioEngine] ▶ Deck \(deck.rawValue) play desde frame \(from)")
+            saveSession()
         }
     }
 
@@ -246,6 +299,7 @@ final class AudioEngine: ObservableObject {
             startTimer(deck: deck)
             deckState.isPlaying = true
         }
+        saveSession()
     }
 
     func sync(slave: DeckID) {
@@ -259,16 +313,42 @@ final class AudioEngine: ObservableObject {
         }
         slaveDeck.tempo = masterBPM / slaveBPM
         print("[AudioEngine] 🔄 Sync deck \(slave.rawValue): rate=\(String(format:"%.3f", slaveDeck.tempo))")
+        saveSession()
     }
 
     func setCue(deck: DeckID) {
-        let d = deck == .left ? deckA : deckB
-        d.cuePoint = d.currentTime
+        setHotCue(deck: deck, index: 0)
     }
 
     func jumpToCue(deck: DeckID) {
+        jumpToHotCue(deck: deck, index: 0)
+    }
+
+    func setHotCue(deck: DeckID, index: Int) {
         let d = deck == .left ? deckA : deckB
-        if let cue = d.cuePoint { seek(to: cue, deck: deck) }
+        let cue = HotCue(
+            index: index,
+            time: d.currentTime,
+            name: "C\(index + 1)",
+            color: HotCueColor.allCases[index % HotCueColor.allCases.count]
+        )
+
+        if let existingIndex = d.hotCues.firstIndex(where: { $0.index == index }) {
+            d.hotCues[existingIndex] = cue
+        } else {
+            d.hotCues.append(cue)
+            d.hotCues.sort { $0.index < $1.index }
+            if d.hotCues.count > 8 {
+                d.hotCues = Array(d.hotCues.prefix(8))
+            }
+        }
+        saveSession()
+    }
+
+    func jumpToHotCue(deck: DeckID, index: Int) {
+        let d = deck == .left ? deckA : deckB
+        guard let cue = d.hotCues.first(where: { $0.index == index }) else { return }
+        seek(to: cue.time, deck: deck)
     }
 
     func toggleLoop(deck: DeckID) {
@@ -284,12 +364,14 @@ final class AudioEngine: ObservableObject {
             }
             d.isLooping = true
         }
+        saveSession()
     }
 
     func scaleLoop(deck: DeckID, factor: Double) {
         let d = deck == .left ? deckA : deckB
         guard let dur = d.track?.duration else { return }
         d.loopEnd = min(d.loopStart + (d.loopEnd - d.loopStart) * factor, dur)
+        saveSession()
     }
 
     // MARK: - Internos
@@ -329,6 +411,116 @@ final class AudioEngine: ObservableObject {
         else             { segStartB = frame; pausedAtB = frame }
     }
 
+    private func updateTimePitch(for deck: DeckChannel) {
+        let state = deck == .left ? deckA : deckB
+        let pitch = deck == .left ? pitchA : pitchB
+        let rate = max(state.tempo, 0.01)
+
+        pitch.rate = Float(rate)
+        if state.keyLock {
+            pitch.pitch = 0
+        } else {
+            pitch.pitch = Float(-1200.0 * log2(rate))
+        }
+        saveSession()
+    }
+
+    private func installVUMeterTap(on node: AVAudioMixerNode, deck: DeckChannel) {
+        node.removeTap(onBus: 0)
+        node.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            let rms = Self.calculateRMS(buffer: buffer)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if deck == .left {
+                    self.vuLevelA = rms
+                } else {
+                    self.vuLevelB = rms
+                }
+            }
+        }
+    }
+
+    private static func calculateRMS(buffer: AVAudioPCMBuffer) -> Float {
+        guard let channel = buffer.floatChannelData?.pointee else { return 0 }
+        var rms: Float = 0
+        vDSP_rmsqv(channel, 1, &rms, vDSP_Length(buffer.frameLength))
+        return min(max(rms * 6, 0), 1)
+    }
+
+    #if os(iOS)
+    private func applyAudioLatencySetting() {
+        let latency = UserDefaults.standard.double(forKey: "pulso_audio_latency")
+        guard latency > 0 else { return }
+        let session = AVAudioSession.sharedInstance()
+        try? session.setPreferredIOBufferDuration(latency)
+        try? session.setActive(true)
+    }
+    #endif
+
+    func saveSession() {
+        let snapshot = SessionSnapshot(
+            crossfader: crossfader,
+            masterVolume: masterVolume,
+            deckA: snapshot(for: deckA),
+            deckB: snapshot(for: deckB)
+        )
+
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(snapshot) {
+            UserDefaults.standard.set(data, forKey: sessionStorageKey)
+        }
+    }
+
+    func restoreSession(library: LibraryService) {
+        guard let data = UserDefaults.standard.data(forKey: sessionStorageKey),
+              let snapshot = try? JSONDecoder().decode(SessionSnapshot.self, from: data) else { return }
+
+        crossfader = snapshot.crossfader
+        masterVolume = snapshot.masterVolume
+        restore(deck: deckA, from: snapshot.deckA, deckID: .left, library: library)
+        restore(deck: deckB, from: snapshot.deckB, deckID: .right, library: library)
+        refreshFaders()
+    }
+
+    private func restore(deck: DeckState, from snapshot: DeckSnapshot, deckID: DeckID, library: LibraryService) {
+        if let trackID = snapshot.trackID,
+           let track = library.tracks.first(where: { $0.id == trackID }) {
+            load(track: track, into: deckID)
+        }
+
+        deck.tempo = snapshot.tempo
+        deck.volume = snapshot.volume
+        deck.eqLow = snapshot.eqLow
+        deck.eqMid = snapshot.eqMid
+        deck.eqHigh = snapshot.eqHigh
+        deck.isLooping = snapshot.isLooping
+        deck.loopStart = snapshot.loopStart
+        deck.loopEnd = snapshot.loopEnd
+        deck.keyLock = snapshot.keyLock
+        deck.hotCues = snapshot.hotCues
+
+        if snapshot.trackID != nil {
+            seek(to: snapshot.currentTime, deck: deckID)
+        }
+    }
+
+    private func snapshot(for deck: DeckState) -> DeckSnapshot {
+        DeckSnapshot(
+            trackID: deck.track?.id,
+            currentTime: deck.currentTime,
+            tempo: deck.tempo,
+            volume: deck.volume,
+            eqLow: deck.eqLow,
+            eqMid: deck.eqMid,
+            eqHigh: deck.eqHigh,
+            isLooping: deck.isLooping,
+            loopStart: deck.loopStart,
+            loopEnd: deck.loopEnd,
+            keyLock: deck.keyLock,
+            hotCues: deck.hotCues
+        )
+    }
+
     // MARK: - Timer
 
     private func startTimer(deck: DeckID) {
@@ -339,7 +531,6 @@ final class AudioEngine: ObservableObject {
                 guard let self else { return }
                 let d    = deck == .left ? self.deckA    : self.deckB
                 let file = deck == .left ? self.fileA    : self.fileB
-                let fader = deck == .left ? self.faderA  : self.faderB
                 guard let file, let dur = d.track?.duration else { return }
 
                 // Posición real
@@ -360,9 +551,6 @@ final class AudioEngine: ObservableObject {
                     return
                 }
 
-                // VU meter (proxy)
-                let vu = fader.outputVolume * Float.random(in: 0.55...1.0)
-                if deck == .left { self.vuLevelA = vu } else { self.vuLevelB = vu }
             }
         if deck == .left { timerA = timer } else { timerB = timer }
     }

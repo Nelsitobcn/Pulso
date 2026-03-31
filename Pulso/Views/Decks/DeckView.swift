@@ -21,6 +21,8 @@ struct DeckView: View {
             }
             .frame(height: 80)
 
+            HotCuePadsView(deck: deck)
+
             // Plato giratorio (visual)
             TurntableView(isSpinning: deck.isPlaying)
                 .frame(width: 140, height: 140)
@@ -61,8 +63,8 @@ struct DeckView: View {
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
             Task { @MainActor in
-                await libraryService.importTracks(urls: [url])
-                if let track = libraryService.tracks.last {
+                let imported = await libraryService.importTracks(urls: [url])
+                if let track = imported.first {
                     audioEngine.load(track: track, into: deck.id)
                 }
             }
@@ -136,11 +138,15 @@ struct TransportControlsView: View {
         HStack(spacing: 16) {
             // CUE
             Button {
+                #if os(macOS)
                 if NSEvent.modifierFlags.contains(.shift) {
                     audioEngine.setCue(deck: deck.id)
                 } else {
                     audioEngine.jumpToCue(deck: deck.id)
                 }
+                #else
+                audioEngine.jumpToCue(deck: deck.id)
+                #endif
             } label: {
                 Text("CUE")
                     .font(.caption.bold())
@@ -150,6 +156,18 @@ struct TransportControlsView: View {
             }
             .buttonStyle(.plain)
             .help("Click: ir al cue | Shift+Click: marcar cue")
+
+            Button {
+                deck.keyLock.toggle()
+            } label: {
+                Text("KEY")
+                    .font(.caption.bold())
+                    .frame(width: 48, height: 36)
+                    .background(deck.keyLock ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .help("Bloquear o liberar la tonalidad al cambiar tempo")
 
             // PLAY / PAUSE
             Button {
@@ -178,6 +196,49 @@ struct TransportControlsView: View {
             .buttonStyle(.plain)
         }
         .foregroundStyle(.white)
+    }
+}
+
+struct HotCuePadsView: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<4, id: \.self) { index in
+                let cue = deck.hotCues.first(where: { $0.index == index })
+                Button {
+                    if cue != nil {
+                        audioEngine.jumpToHotCue(deck: deck.id, index: index)
+                    } else {
+                        audioEngine.setHotCue(deck: deck.id, index: index)
+                    }
+                } label: {
+                    Text("C\(index + 1)")
+                        .font(.caption.bold())
+                        .frame(width: 42, height: 28)
+                        .background(backgroundColor(for: cue))
+                        .foregroundStyle(foregroundColor(for: cue))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .onLongPressGesture {
+                    audioEngine.setHotCue(deck: deck.id, index: index)
+                }
+                .help("Click: ir al hot cue | Long press: guardar posición actual")
+            }
+        }
+    }
+
+    private func backgroundColor(for cue: HotCue?) -> Color {
+        if let cue {
+            return cue.color.swiftUIColor
+        }
+        return Color.white.opacity(0.08)
+    }
+
+    private func foregroundColor(for cue: HotCue?) -> Color {
+        cue == nil ? .secondary : .white
     }
 }
 

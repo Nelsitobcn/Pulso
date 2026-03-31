@@ -38,6 +38,12 @@ struct AudioSettingsTab: View {
                         .frame(width: 40)
                         .foregroundStyle(.secondary)
                 }
+
+                #if os(macOS)
+                Text("En macOS este ajuste es informativo por ahora. La latencia aplicada solo se usa en iPad/iPhone.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                #endif
             }
 
             Section("Crossfader") {

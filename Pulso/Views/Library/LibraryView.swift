@@ -18,6 +18,16 @@ struct LibraryView: View {
         }
     }
 
+    private var suggestions: [Track] {
+        if let track = audioEngine.deckA.track {
+            return libraryService.suggestions(for: track, currentDeckBPM: track.bpm.map { $0 * audioEngine.deckA.tempo })
+        }
+        if let track = audioEngine.deckB.track {
+            return libraryService.suggestions(for: track, currentDeckBPM: track.bpm.map { $0 * audioEngine.deckB.tempo })
+        }
+        return []
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Barra de búsqueda y ordenación
@@ -52,6 +62,11 @@ struct LibraryView: View {
 
             Divider()
 
+            if !suggestions.isEmpty {
+                SuggestedTracksView(tracks: Array(suggestions.prefix(5)))
+                Divider()
+            }
+
             // Lista de canciones
             if filteredTracks.isEmpty {
                 LibraryEmptyView()
@@ -79,6 +94,52 @@ struct LibraryView: View {
             case .bpm: return "BPM"
             }
         }
+    }
+}
+
+struct SuggestedTracksView: View {
+    let tracks: [Track]
+    @EnvironmentObject var audioEngine: AudioEngine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sugerencias")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(tracks) { track in
+                        Button {
+                            audioEngine.load(track: track, into: .right)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(track.title)
+                                    .font(.caption.bold())
+                                    .lineLimit(1)
+                                Text(track.artist)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Text(track.bpm.map { String(format: "%.1f BPM", $0) } ?? "Sin BPM")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .frame(width: 180, alignment: .leading)
+                            .padding(8)
+                            .background(Color("BGSecondary"))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+        }
+        .background(Color("BGPrimary"))
     }
 }
 

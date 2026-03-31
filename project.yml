@@ -51,6 +51,6 @@ targets:
         # Permisos necesarios para acceso a archivos de música
         NSMicrophoneUsageDescription: "Pulso necesita acceso al micrófono para la entrada de audio."
         # macOS sandbox — acceso a carpetas de música
-        com.apple.security.app-sandbox: YES
+        com.apple.security.app-sandbox: NO
         com.apple.security.files.user-selected.read-write: YES
         com.apple.security.device.audio-input: YES

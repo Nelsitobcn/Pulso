@@ -372,7 +372,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.app-sandbox" = NO;
 				"com.apple.security.device.audio-input" = YES;
 				"com.apple.security.files.user-selected.read-write" = YES;
 			};
@@ -395,7 +395,7 @@
 				PRODUCT_NAME = Pulso;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.app-sandbox" = NO;
 				"com.apple.security.device.audio-input" = YES;
 				"com.apple.security.files.user-selected.read-write" = YES;
 			};
@@ -483,7 +483,7 @@
 				PRODUCT_NAME = Pulso;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.app-sandbox" = NO;
 				"com.apple.security.device.audio-input" = YES;
 				"com.apple.security.files.user-selected.read-write" = YES;
 			};
@@ -507,7 +507,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				"com.apple.security.app-sandbox" = YES;
+				"com.apple.security.app-sandbox" = NO;
 				"com.apple.security.device.audio-input" = YES;
 				"com.apple.security.files.user-selected.read-write" = YES;
 			};
