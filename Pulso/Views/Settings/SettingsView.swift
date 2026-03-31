@@ -14,8 +14,8 @@ struct SettingsView: View {
             LibrarySettingsTab(autoAnalyze: $autoAnalyze)
                 .tabItem { Label("Biblioteca", systemImage: "music.note.list") }
 
-            AccountTab()
-                .tabItem { Label("Cuenta", systemImage: "person.circle") }
+            DJProfileTab()
+                .tabItem { Label("Perfil", systemImage: "person.circle") }
         }
         .frame(width: 480, height: 320)
         .padding()
@@ -69,22 +69,20 @@ struct LibrarySettingsTab: View {
     }
 }
 
-struct AccountTab: View {
+struct DJProfileTab: View {
     @EnvironmentObject var authService: AuthService
 
     var body: some View {
         Form {
-            if let user = authService.currentUser {
-                Section("Tu cuenta") {
-                    LabeledContent("Email", value: user.email)
-                    LabeledContent("Plan", value: user.plan.displayName)
-                }
+            Section("Tu perfil") {
+                TextField("Nombre de DJ", text: $authService.djName)
+            }
 
-                Section {
-                    Button("Cerrar sesión", role: .destructive) {
-                        authService.signOut()
-                    }
-                }
+            Section("Plan") {
+                LabeledContent("Plan actual", value: authService.plan.displayName)
+                Text("Las suscripciones Pro y Pro+ estarán disponibles próximamente en el App Store.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

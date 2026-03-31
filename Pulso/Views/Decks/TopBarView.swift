@@ -19,25 +19,13 @@ struct TopBarView: View {
 
             Spacer()
 
-            // Info de usuario + plan
+            // Nombre de DJ y plan
             HStack(spacing: 8) {
-                if let user = authService.currentUser {
-                    Text(user.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Text(authService.djName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                    PlanBadgeView(plan: user.plan)
-                }
-
-                Button {
-                    authService.signOut()
-                } label: {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Cerrar sesión")
+                PlanBadgeView(plan: authService.plan)
             }
         }
         .frame(height: 28)
@@ -45,7 +33,7 @@ struct TopBarView: View {
 }
 
 struct PlanBadgeView: View {
-    let plan: PulsoUser.SubscriptionPlan
+    let plan: AuthService.SubscriptionPlan
 
     var body: some View {
         Text(plan.displayName)
@@ -58,15 +46,7 @@ struct PlanBadgeView: View {
     }
 }
 
-extension PulsoUser.SubscriptionPlan {
-    var displayName: String {
-        switch self {
-        case .free: return "FREE"
-        case .pro: return "PRO"
-        case .proPlus: return "PRO+"
-        }
-    }
-
+extension AuthService.SubscriptionPlan {
     var color: Color {
         switch self {
         case .free: return .gray
