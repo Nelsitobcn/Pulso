@@ -28,10 +28,10 @@ struct CenterControlsView: View {
                 .frame(height: 20)
             }
 
-            // VU Meters simulados
+            // VU Meters reales desde el fader
             HStack(spacing: 6) {
-                VUMeterView(label: "A")
-                VUMeterView(label: "B")
+                VUMeterView(label: "A", level: Double(audioEngine.vuLevelA))
+                VUMeterView(label: "B", level: Double(audioEngine.vuLevelB))
             }
 
             Spacer()
@@ -97,10 +97,10 @@ struct CrossfaderView: View {
     }
 }
 
-/// VU Meter vertical simulado
+/// VU Meter vertical con nivel real del engine
 struct VUMeterView: View {
     let label: String
-    @State private var level: Double = 0.0
+    var level: Double  // 0.0–1.0 desde AudioEngine
 
     private let segments = 12
 
@@ -112,12 +112,12 @@ struct VUMeterView: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(segmentColor(index: i, active: active))
                     .frame(width: 12, height: 4)
+                    .animation(.easeOut(duration: 0.05), value: active)
             }
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .onAppear { simulateLevel() }
     }
 
     private func segmentColor(index: Int, active: Bool) -> Color {
@@ -125,14 +125,5 @@ struct VUMeterView: View {
         if index >= segments - 2 { return .red }
         if index >= segments - 4 { return .yellow }
         return .green
-    }
-
-    private func simulateLevel() {
-        // Simulación visual — en Fase 2 conectar a AVAudioEngine metering
-        Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
-            withAnimation(.easeOut(duration: 0.08)) {
-                level = Double.random(in: 0.3...0.85)
-            }
-        }
     }
 }
