@@ -21,11 +21,12 @@
 |------|-----------|-------|
 | UI | SwiftUI | Nativa macOS + iPadOS, código compartido |
 | Audio engine | AVFoundation + Core Audio | Latencia ultra-baja, nativo Apple |
-| IA / Stems | Core ML + Apple Neural Engine | Modelo Demucs convertido a .mlmodel |
-| Auth | Firebase Auth | Cuentas de DJ, biblioteca en la nube |
-| Base de datos | Firestore | Biblioteca, sets guardados, historial |
-| Storage | Firebase Storage | Archivos de audio en la nube |
-| Pool integración | Beatsource API (fase 1) | Futura: PromoMusicBcn + pools europeas |
+| IA / Stems | Core ML + Apple Neural Engine | Modelo Demucs convertido a .mlmodel — Fase 2 |
+| Perfil DJ | UserDefaults | Solo nombre de DJ — sin login, sin backend |
+| Biblioteca | JSON local en Application Support | Metadatos; audio en disco del DJ |
+| Backend cloud | CloudKit o Supabase — **Fase 3** | Sync Mac↔iPad, sets en la nube |
+| Suscripciones | RevenueCat + App Store — **Fase 3** | Planes Pro / Pro+ |
+| Pool integración | Beatsource API — **Fase 2** | Futura: PromoMusicBcn + pools europeas |
 
 ---
 
@@ -45,11 +46,14 @@ Durante desarrollo: distribución directa via TestFlight / notarización macOS.
 ## Features por fases
 
 ### Fase 1 — MVP
-- [ ] Reproductor de 2 decks (cargar canción, play/pause, sync BPM)
-- [ ] Crossfader y EQ básico (graves, medios, agudos por deck)
-- [ ] Análisis automático de BPM y key al importar canción
-- [ ] Biblioteca local de música
-- [ ] Auth con Firebase (login/registro)
+- [x] Reproductor de 2 decks (cargar canción, play/pause, sync BPM)
+- [x] Crossfader y EQ básico (graves, medios, agudos por deck)
+- [x] Análisis automático de BPM y key al importar canción
+- [x] Biblioteca local de música (JSON en Application Support)
+- [x] Perfil DJ local (nombre en UserDefaults — sin login ni backend)
+- [ ] Probar en Mac con canciones reales
+- [ ] Crear proyecto Xcode (.xcodeproj) para desarrollo con Mauri
+- [ ] Invitar a Mauri como collaborator en GitHub
 
 ### Fase 2 — IA
 - [ ] Stem separation en tiempo real (Core ML + Neural Engine)
