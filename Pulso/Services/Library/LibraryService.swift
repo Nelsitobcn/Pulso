@@ -106,13 +106,7 @@ final class LibraryService: ObservableObject {
     }
 
     private func saveToDisk() {
-        // No guardar waveformData en disco para ahorrar espacio (se recalcula)
-        let slim = tracks.map { t -> Track in
-            var copy = t
-            copy.waveformData = nil
-            return copy
-        }
-        if let data = try? JSONEncoder().encode(slim) {
+        if let data = try? JSONEncoder().encode(tracks) {
             try? data.write(to: storageURL)
         }
     }

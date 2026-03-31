@@ -1,100 +1,68 @@
 import SwiftUI
 
-/// Visualización de la forma de onda de una pista con posición de reproducción
 struct WaveformView: View {
     @ObservedObject var deck: DeckState
-    let onSeek: (Double) -> Void   // recibe progress 0.0…1.0
+    let onSeek: (Double) -> Void
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                // Waveform bars
                 if let waveform = deck.track?.waveformData, !waveform.isEmpty {
-                    // Barras ya reproducidas (más brillante)
-                    WaveformBarsShape(samples: waveform, from: 0, to: deck.progress)
-                        .fill(LinearGradient(
-                            colors: [Color.accentColor, Color.accentColor.opacity(0.6)],
-                            startPoint: .top, endPoint: .bottom
-                        ))
+                    Canvas { ctx, size in
+                        let count    = waveform.count
+                        let barW     = size.width / CGFloat(count)
+                        let midY     = size.height / 2
+                        let progress = deck.progress
 
-                    // Barras pendientes (más tenue)
-                    WaveformBarsShape(samples: waveform, from: deck.progress, to: 1)
-                        .fill(LinearGradient(
-                            colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.15)],
-                            startPoint: .top, endPoint: .bottom
-                        ))
+                        for i in 0..<count {
+                            let x      = CGFloat(i) * barW
+                            let h      = max(2, CGFloat(waveform[i]) * size.height * 0.9)
+                            let rect   = CGRect(x: x + barW * 0.1,
+                                                y: midY - h / 2,
+                                                width: barW * 0.8,
+                                                height: h)
+                            let played = Double(i) / Double(count) < progress
+                            ctx.fill(
+                                Path(roundedRect: rect, cornerRadius: 1),
+                                with: .color(played ? Color.accentColor : Color.accentColor.opacity(0.3))
+                            )
+                        }
+                    }
                 } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.15))
-                        .overlay(
-                            Text("Sin pista")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        )
+                    ZStack {
+                        Color.gray.opacity(0.12)
+                        Text("Sin pista cargada")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
 
-                // Línea de posición actual
-                Rectangle()
-                    .fill(Color.white.opacity(0.9))
+                // Línea de playhead
+                Color.white.opacity(0.85)
                     .frame(width: 2)
                     .offset(x: geo.size.width * deck.progress - 1)
 
                 // Marcador de cue
-                if let cue = deck.cuePoint, let duration = deck.track?.duration, duration > 0 {
-                    let cueX = geo.size.width * (cue / duration)
-                    Triangle()
-                        .fill(Color.yellow)
-                        .frame(width: 8, height: 8)
-                        .offset(x: cueX - 4, y: -4)
+                if let cue = deck.cuePoint,
+                   let dur = deck.track?.duration, dur > 0 {
+                    Color.yellow
+                        .frame(width: 2)
+                        .offset(x: geo.size.width * (cue / dur) - 1)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let progress = max(0, min(1, value.location.x / geo.size.width))
-                        onSeek(Double(progress))
+                    .onChanged { v in
+                        onSeek(max(0, min(1, Double(v.location.x / geo.size.width))))
                     }
             )
         }
     }
 }
 
-/// Shape que dibuja las barras de waveform en un rango de progreso [from, to]
-struct WaveformBarsShape: Shape {
-    let samples: [Float]
-    let from: Double    // 0.0 … 1.0
-    let to: Double      // 0.0 … 1.0
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard !samples.isEmpty else { return path }
-
-        let count = samples.count
-        let barWidth = rect.width / CGFloat(count)
-        let centerY = rect.midY
-
-        let startIdx = Int((from * Double(count)).rounded(.up))
-        let endIdx   = Int((to   * Double(count)).rounded(.down))
-        guard startIdx <= endIdx else { return path }
-
-        for i in startIdx...endIdx {
-            guard i < count else { break }
-            let x = CGFloat(i) * barWidth
-            let height = CGFloat(samples[i]) * rect.height * 0.9
-            let barRect = CGRect(
-                x: x + barWidth * 0.1,
-                y: centerY - height / 2,
-                width: barWidth * 0.8,
-                height: max(1, height)
-            )
-            path.addRoundedRect(in: barRect, cornerSize: CGSize(width: 1, height: 1))
-        }
-        return path
-    }
-}
-
+// Triangle sigue existiendo para otros usos
 struct Triangle: Shape {
     func path(in rect: CGRect) -> Path {
         Path { p in
