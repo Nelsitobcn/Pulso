@@ -19,10 +19,7 @@ struct EQKnob: View {
     @Binding var value: Double    // -1.0 (kill) a +1.0 (boost)
     let color: Color
 
-    // Guardamos el valor al inicio del drag para calcular el delta desde ahí
-    @State private var valueAtDragStart: Double = 0
-    @State private var dragStartY: CGFloat = 0
-    @State private var isDragging: Bool = false
+    @State private var lastDragY: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 4) {
@@ -34,41 +31,35 @@ struct EQKnob: View {
 
                 // Arco de valor
                 Circle()
-                    .trim(from: 0.1, to: max(0.1, 0.1 + 0.8 * ((value + 1) / 2)))
+                    .trim(from: 0.1, to: max(0.105, 0.1 + 0.8 * ((value + 1) / 2)))
                     .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .frame(width: 44, height: 44)
                     .rotationEffect(.degrees(-225))
 
-                // Indicador central
+                // Indicador
                 Rectangle()
                     .fill(Color.white)
                     .frame(width: 2, height: 12)
                     .offset(y: -10)
                     .rotationEffect(.degrees(value * 135))
-
-                // Double-click para reset a centro
-                Color.clear
-                    .frame(width: 44, height: 44)
-                    .onTapGesture(count: 2) { value = 0 }
             }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 1)
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { drag in
-                        if !isDragging {
-                            // Capturar estado inicial solo una vez por gesto
-                            isDragging = true
-                            dragStartY = drag.startLocation.y
-                            valueAtDragStart = value
-                        }
-                        // Delta desde el inicio del gesto — sin acumulación
-                        let deltaY = dragStartY - drag.location.y
-                        let newValue = valueAtDragStart + Double(deltaY) / 60.0
-                        value = max(-1.0, min(1.0, newValue))
+                        let delta = Double(lastDragY - drag.location.y) / 100.0
+                        lastDragY = drag.location.y
+                        value = max(-1.0, min(1.0, value + delta))
                     }
                     .onEnded { _ in
-                        isDragging = false
+                        lastDragY = 0
                     }
             )
+            // Doble clic para reset
+            .onTapGesture(count: 2) {
+                value = 0
+            }
 
             Text(label)
                 .font(.caption2.bold())

@@ -150,26 +150,28 @@ struct TransportControlsView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // CUE
+            // CUE: click = marcar, shift+click = saltar al cue
             Button {
                 #if os(macOS)
                 if NSEvent.modifierFlags.contains(.shift) {
-                    audioEngine.setCue(deck: deck.id)
-                } else {
                     audioEngine.jumpToCue(deck: deck.id)
+                } else {
+                    audioEngine.setCue(deck: deck.id)
                 }
                 #else
-                audioEngine.jumpToCue(deck: deck.id)
+                audioEngine.setCue(deck: deck.id)
                 #endif
             } label: {
                 Text("CUE")
                     .font(.caption.bold())
                     .frame(width: 48, height: 36)
-                    .background(Color("ButtonCue"))
+                    .background(deck.id == .left
+                        ? (audioEngine.deckA.hotCues.isEmpty ? Color("ButtonCue") : Color.yellow.opacity(0.8))
+                        : (audioEngine.deckB.hotCues.isEmpty ? Color("ButtonCue") : Color.yellow.opacity(0.8)))
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
-            .help("Click: ir al cue | Shift+Click: marcar cue")
+            .help("Click: marcar cue | Shift+Click: saltar al cue")
 
             Button {
                 deck.keyLock.toggle()
