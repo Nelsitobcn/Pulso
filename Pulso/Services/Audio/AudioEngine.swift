@@ -21,10 +21,10 @@ final class AudioEngine: ObservableObject {
     private var playerB: AVAudioPlayerNode?
     private var eqNodeA: AVAudioUnitEQ?
     private var eqNodeB: AVAudioUnitEQ?
-    private var mixerNode: AVAudioMixerNode?
 
     private var timerA: AnyCancellable?
     private var timerB: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         setupEngine()
@@ -63,25 +63,21 @@ final class AudioEngine: ObservableObject {
             print("[AudioEngine] Error al iniciar: \(error)")
         }
 
-        // Observar cambios de EQ y volumen en tiempo real
         observeDeckChanges()
     }
 
     private func configureEQ(_ eq: AVAudioUnitEQ) {
-        // Low shelf — bajos (hasta 250 Hz)
         eq.bands[0].filterType = .lowShelf
         eq.bands[0].frequency = 250
         eq.bands[0].gain = 0
         eq.bands[0].bypass = false
 
-        // Parametric — medios (1 kHz)
         eq.bands[1].filterType = .parametric
         eq.bands[1].frequency = 1000
         eq.bands[1].bandwidth = 1.0
         eq.bands[1].gain = 0
         eq.bands[1].bypass = false
 
-        // High shelf — agudos (desde 8 kHz)
         eq.bands[2].filterType = .highShelf
         eq.bands[2].frequency = 8000
         eq.bands[2].gain = 0
@@ -91,33 +87,27 @@ final class AudioEngine: ObservableObject {
     // MARK: - Observadores
 
     private func observeDeckChanges() {
-        // Crossfader → volúmenes de cada deck
         $crossfader
-            .sink { [weak self] value in
-                self?.applyCrossfader(value)
-            }
+            .sink { [weak self] value in self?.applyCrossfader(value) }
             .store(in: &cancellables)
 
-        // EQ deck A
-        deckA.$eqLow.sink { [weak self] v in self?.eqNodeA?.bands[0].gain = Float(v * 12) }.store(in: &cancellables)
-        deckA.$eqMid.sink { [weak self] v in self?.eqNodeA?.bands[1].gain = Float(v * 12) }.store(in: &cancellables)
+        // EQ deck A — rango ±12 dB
+        deckA.$eqLow.sink  { [weak self] v in self?.eqNodeA?.bands[0].gain = Float(v * 12) }.store(in: &cancellables)
+        deckA.$eqMid.sink  { [weak self] v in self?.eqNodeA?.bands[1].gain = Float(v * 12) }.store(in: &cancellables)
         deckA.$eqHigh.sink { [weak self] v in self?.eqNodeA?.bands[2].gain = Float(v * 12) }.store(in: &cancellables)
 
         // EQ deck B
-        deckB.$eqLow.sink { [weak self] v in self?.eqNodeB?.bands[0].gain = Float(v * 12) }.store(in: &cancellables)
-        deckB.$eqMid.sink { [weak self] v in self?.eqNodeB?.bands[1].gain = Float(v * 12) }.store(in: &cancellables)
+        deckB.$eqLow.sink  { [weak self] v in self?.eqNodeB?.bands[0].gain = Float(v * 12) }.store(in: &cancellables)
+        deckB.$eqMid.sink  { [weak self] v in self?.eqNodeB?.bands[1].gain = Float(v * 12) }.store(in: &cancellables)
         deckB.$eqHigh.sink { [weak self] v in self?.eqNodeB?.bands[2].gain = Float(v * 12) }.store(in: &cancellables)
     }
 
     private func applyCrossfader(_ value: Double) {
-        // Curva lineal simple: A baja cuando crossfader va a la derecha
         let gainA = Float(max(0, 1.0 - (value * 2 - 1).clamped(to: 0...1)))
         let gainB = Float(max(0, (value * 2 - 1).clamped(to: -1...0) + 1))
         playerA?.volume = gainA * Float(deckA.volume) * Float(masterVolume)
         playerB?.volume = gainB * Float(deckB.volume) * Float(masterVolume)
     }
-
-    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - API pública
 
@@ -127,8 +117,8 @@ final class AudioEngine: ObservableObject {
 
         guard let player else { return }
 
-        // Detener si estaba reproduciendo
         if player.isPlaying { player.stop() }
+        stopTimer(deck: deck)
 
         do {
             let file = try AVAudioFile(forReading: track.url)
@@ -136,6 +126,7 @@ final class AudioEngine: ObservableObject {
             deckState.track = track
             deckState.currentTime = 0
             deckState.isPlaying = false
+            deckState.isLooping = false
         } catch {
             print("[AudioEngine] Error cargando \(track.title): \(error)")
         }
@@ -158,7 +149,6 @@ final class AudioEngine: ObservableObject {
     }
 
     func sync(slave: DeckID) {
-        // Sincroniza el BPM del deck esclavo al maestro
         let masterDeck = slave == .left ? deckB : deckA
         let slaveDeck = slave == .left ? deckA : deckB
 
@@ -193,12 +183,43 @@ final class AudioEngine: ObservableObject {
             let sampleRate = file.processingFormat.sampleRate
             let startFrame = AVAudioFramePosition(time * sampleRate)
             let frameCount = AVAudioFrameCount(file.length - startFrame)
+            guard frameCount > 0 else { return }
             player.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil)
             deckState.currentTime = time
             if wasPlaying { player.play() }
         } catch {
             print("[AudioEngine] Error en seek: \(error)")
         }
+    }
+
+    // MARK: - Loops
+
+    /// Activa/desactiva el loop. Si no hay loop definido, crea uno de 4 beats desde el punto actual.
+    func toggleLoop(deck: DeckID) {
+        let deckState = deck == .left ? deckA : deckB
+        guard let track = deckState.track else { return }
+
+        if deckState.isLooping {
+            // Desactivar loop
+            deckState.isLooping = false
+        } else {
+            // Si no hay loop guardado, crear uno de 4 beats
+            if deckState.loopEnd <= deckState.loopStart {
+                let beatDuration = track.bpm.map { 60.0 / $0 } ?? 0.5
+                deckState.loopStart = deckState.currentTime
+                deckState.loopEnd = min(deckState.currentTime + beatDuration * 4, track.duration)
+            }
+            deckState.isLooping = true
+        }
+    }
+
+    /// Ajusta el tamaño del loop: 0.5 = mitad, 2.0 = doble
+    func scaleLoop(deck: DeckID, factor: Double) {
+        let deckState = deck == .left ? deckA : deckB
+        guard let duration = deckState.track?.duration else { return }
+        let currentLength = deckState.loopEnd - deckState.loopStart
+        let newLength = currentLength * factor
+        deckState.loopEnd = min(deckState.loopStart + newLength, duration)
     }
 
     // MARK: - Timer de progreso
@@ -209,12 +230,19 @@ final class AudioEngine: ObservableObject {
             .sink { [weak self] _ in
                 guard let self else { return }
                 let deckState = deck == .left ? self.deckA : self.deckB
-                if let duration = deckState.track?.duration {
-                    deckState.currentTime = min(deckState.currentTime + 0.05, duration)
-                    if deckState.currentTime >= duration {
-                        deckState.isPlaying = false
-                        self.stopTimer(deck: deck)
-                    }
+                guard let duration = deckState.track?.duration else { return }
+
+                deckState.currentTime = min(deckState.currentTime + 0.05, duration)
+
+                // Loop: volver al inicio del loop cuando llegamos al final
+                if deckState.isLooping && deckState.currentTime >= deckState.loopEnd {
+                    self.seek(to: deckState.loopStart, deck: deck)
+                    return
+                }
+
+                if deckState.currentTime >= duration {
+                    deckState.isPlaying = false
+                    self.stopTimer(deck: deck)
                 }
             }
 

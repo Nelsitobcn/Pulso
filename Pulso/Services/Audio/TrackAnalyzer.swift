@@ -12,11 +12,10 @@ actor TrackAnalyzer {
         let url = track.url
         guard let (buffer, format) = await loadAudioBuffer(url: url) else { return }
 
-        // Ejecutar en secuencia para evitar captura mutable de inout en concurrente
         track.duration = await getDuration(url: url)
         track.bpm = detectBPM(buffer: buffer, sampleRate: format.sampleRate)
+        track.key = detectKey(buffer: buffer, sampleRate: format.sampleRate)
         track.waveformData = buildWaveform(buffer: buffer, targetSamples: 512)
-        // key detection: fase 2 con Core ML
     }
 
     // MARK: - Duración
@@ -32,7 +31,6 @@ actor TrackAnalyzer {
         guard let channelData = buffer.floatChannelData?[0] else { return 120.0 }
         let frameCount = Int(buffer.frameLength)
 
-        // 1. Calcular energía en ventanas de 512 samples
         let windowSize = 512
         let hopSize = 256
         var energyEnvelope: [Float] = []
@@ -46,19 +44,16 @@ actor TrackAnalyzer {
             i += hopSize
         }
 
-        // 2. Diferencia de energía (onset strength)
         var onsetStrength: [Float] = [0]
         for j in 1..<energyEnvelope.count {
             let diff = max(0, energyEnvelope[j] - energyEnvelope[j - 1])
             onsetStrength.append(diff)
         }
 
-        // 3. Autocorrelación para encontrar período dominante
         let acSize = onsetStrength.count
         var autocorr = [Float](repeating: 0, count: acSize)
         vDSP_conv(onsetStrength, 1, onsetStrength, 1, &autocorr, 1, vDSP_Length(acSize), vDSP_Length(acSize))
 
-        // 4. Buscar el pico en rango de BPM 60–180
         let hopDuration = Double(hopSize) / sampleRate
         let minLag = Int(60.0 / (180.0 * hopDuration))
         let maxLag = Int(60.0 / (60.0 * hopDuration))
@@ -73,11 +68,136 @@ actor TrackAnalyzer {
         }
 
         let bpm = 60.0 / (Double(bestLag) * hopDuration)
-        // Redondear al múltiplo de 0.5 más cercano
         return (bpm * 2).rounded() / 2
     }
 
-    // MARK: - Waveform (downsampling para dibujar)
+    // MARK: - Key Detection (Krumhansl-Schmuckler)
+
+    private func detectKey(buffer: AVAudioPCMBuffer, sampleRate: Double) -> MusicalKey? {
+        guard let channelData = buffer.floatChannelData?[0] else { return nil }
+        let frameCount = Int(buffer.frameLength)
+
+        // Calcular chroma vector (12 clases de pitch) via FFT por ventanas
+        let windowSize = 4096
+        let hopSize = 2048
+        var chromaAccum = [Double](repeating: 0, count: 12)
+
+        var windowStart = 0
+        var windowCount = 0
+
+        while windowStart + windowSize <= frameCount {
+            let slice = Array(UnsafeBufferPointer(start: channelData + windowStart, count: windowSize))
+
+            // Aplicar ventana de Hann
+            var windowed = [Float](repeating: 0, count: windowSize)
+            var hannWindow = [Float](repeating: 0, count: windowSize)
+            vDSP_hann_window(&hannWindow, vDSP_Length(windowSize), Int32(vDSP_HANN_NORM))
+            vDSP_vmul(slice, 1, hannWindow, 1, &windowed, 1, vDSP_Length(windowSize))
+
+            // FFT
+            let log2n = vDSP_Length(log2(Double(windowSize)))
+            guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+                windowStart += hopSize
+                continue
+            }
+
+            var real = windowed
+            var imag = [Float](repeating: 0, count: windowSize)
+            var magnitudes = [Float](repeating: 0, count: windowSize / 2)
+
+            real.withUnsafeMutableBufferPointer { realBuf in
+                imag.withUnsafeMutableBufferPointer { imagBuf in
+                    var splitComplex = DSPSplitComplex(realp: realBuf.baseAddress!, imagp: imagBuf.baseAddress!)
+                    vDSP_fft_zip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+                    magnitudes.withUnsafeMutableBufferPointer { magBuf in
+                        vDSP_zvabs(&splitComplex, 1, magBuf.baseAddress!, 1, vDSP_Length(windowSize / 2))
+                    }
+                }
+            }
+            vDSP_destroy_fftsetup(fftSetup)
+
+            // Mapear frecuencias a clases de pitch (chroma)
+            for bin in 1..<(windowSize / 2) {
+                let freq = Double(bin) * sampleRate / Double(windowSize)
+                guard freq >= 27.5 && freq <= 4186.0 else { continue }
+                // Convertir frecuencia a nota MIDI
+                let midi = 12.0 * log2(freq / 440.0) + 69.0
+                let pitchClass = Int(midi.rounded()) % 12
+                if pitchClass >= 0 {
+                    chromaAccum[pitchClass] += Double(magnitudes[bin])
+                }
+            }
+
+            windowStart += hopSize
+            windowCount += 1
+        }
+
+        guard windowCount > 0 else { return nil }
+
+        // Normalizar chroma
+        let maxChroma = chromaAccum.max() ?? 1.0
+        if maxChroma > 0 {
+            chromaAccum = chromaAccum.map { $0 / maxChroma }
+        }
+
+        // Perfiles de tonalidad Krumhansl-Schmuckler
+        let majorProfile: [Double] = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+        let minorProfile: [Double] = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+
+        // Correlación de Pearson para cada tonalidad
+        var bestCorrelation = -Double.infinity
+        var bestKey: MusicalKey? = nil
+
+        for root in 0..<12 {
+            let majorCorr = pearsonCorrelation(chromaAccum, rotated(majorProfile, by: root))
+            let minorCorr = pearsonCorrelation(chromaAccum, rotated(minorProfile, by: root))
+
+            if majorCorr > bestCorrelation {
+                bestCorrelation = majorCorr
+                bestKey = camelotKey(root: root, isMajor: true)
+            }
+            if minorCorr > bestCorrelation {
+                bestCorrelation = minorCorr
+                bestKey = camelotKey(root: root, isMajor: false)
+            }
+        }
+
+        return bestKey
+    }
+
+    private func rotated(_ array: [Double], by n: Int) -> [Double] {
+        let count = array.count
+        let shift = n % count
+        return Array(array[shift...] + array[..<shift])
+    }
+
+    private func pearsonCorrelation(_ x: [Double], _ y: [Double]) -> Double {
+        let n = Double(x.count)
+        let meanX = x.reduce(0, +) / n
+        let meanY = y.reduce(0, +) / n
+        let num = zip(x, y).reduce(0.0) { $0 + ($1.0 - meanX) * ($1.1 - meanY) }
+        let denX = sqrt(x.reduce(0.0) { $0 + pow($1 - meanX, 2) })
+        let denY = sqrt(y.reduce(0.0) { $0 + pow($1 - meanY, 2) })
+        guard denX > 0 && denY > 0 else { return 0 }
+        return num / (denX * denY)
+    }
+
+    /// Convierte root (0=C, 1=C#, ..., 11=B) + mayor/menor a notación Camelot
+    private func camelotKey(root: Int, isMajor: Bool) -> MusicalKey {
+        // Orden Camelot: las mayores son "B", las menores son "A"
+        // Camelot 1B = A♭maj, 2B = E♭maj, 3B = B♭maj, 4B = Fmaj, 5B = Cmaj, 6B = Gmaj,
+        //              7B = Dmaj, 8B = Amaj, 9B = Emaj, 10B = Bmaj, 11B = F#maj, 12B = D♭maj
+        // Camelot 1A = A♭min, 2A = E♭min, etc.
+        let majorCamelot = [5, 12, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10] // C=5B, C#=12B, D=7B...
+        let minorCamelot = [2, 9, 4, 11, 6, 1, 8, 3, 10, 5, 12, 7] // C=2A, C#=9A, D=4A...
+
+        let number = isMajor ? majorCamelot[root] : minorCamelot[root]
+        let letter = isMajor ? "B" : "A"
+        let raw = "\(number)\(letter)"
+        return MusicalKey(rawValue: raw) ?? .c5B
+    }
+
+    // MARK: - Waveform
 
     private func buildWaveform(buffer: AVAudioPCMBuffer, targetSamples: Int) -> [Float] {
         guard let channelData = buffer.floatChannelData?[0] else { return [] }
@@ -102,7 +222,6 @@ actor TrackAnalyzer {
         do {
             let file = try AVAudioFile(forReading: url)
             let format = file.processingFormat
-            // Limitamos a los primeros 60 segundos para el análisis rápido
             let maxFrames = AVAudioFrameCount(min(file.length, AVAudioFramePosition(format.sampleRate * 60)))
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: maxFrames) else { return nil }
             try file.read(into: buffer, frameCount: maxFrames)

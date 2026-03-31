@@ -39,6 +39,9 @@ struct DeckView: View {
             // EQ
             EQView(deck: deck)
 
+            // Loop controls
+            LoopControlsView(deck: deck)
+
             // Pitch/tempo
             TempoSliderView(deck: deck)
         }
@@ -183,6 +186,72 @@ struct TransportControlsView: View {
             .buttonStyle(.plain)
         }
         .foregroundStyle(.white)
+    }
+}
+
+// MARK: - Loop Controls
+
+struct LoopControlsView: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Botón LOOP on/off
+            Button {
+                audioEngine.toggleLoop(deck: deck.id)
+            } label: {
+                Text("LOOP")
+                    .font(.caption.bold())
+                    .frame(width: 48, height: 28)
+                    .background(deck.isLooping ? Color.accentColor : Color.white.opacity(0.1))
+                    .foregroundStyle(deck.isLooping ? .white : .secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help("Activar/desactivar loop de 4 beats")
+
+            // Reducir loop a la mitad
+            Button {
+                audioEngine.scaleLoop(deck: deck.id, factor: 0.5)
+            } label: {
+                Text("½")
+                    .font(.caption.bold())
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.1))
+                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(!deck.isLooping)
+            .help("Reducir loop a la mitad")
+
+            // Duplicar loop
+            Button {
+                audioEngine.scaleLoop(deck: deck.id, factor: 2.0)
+            } label: {
+                Text("×2")
+                    .font(.caption.bold())
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.1))
+                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(!deck.isLooping)
+            .help("Doblar duración del loop")
+
+            Spacer()
+
+            // Duración del loop activo
+            if deck.isLooping {
+                let length = deck.loopEnd - deck.loopStart
+                Text(String(format: "%.2fs", length))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
     }
 }
 
