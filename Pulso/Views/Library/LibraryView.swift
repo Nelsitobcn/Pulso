@@ -211,8 +211,10 @@ struct LibraryTrackRow: View {
                 audioEngine.load(track: track, into: .right)
             }
         }
-        // Drag para soltar en un deck
-        .draggable(track.url.absoluteString)
+        // Drag para soltar en un deck — provee fileURL compatible con onDrop del deck
+        .onDrag {
+            NSItemProvider(object: track.url as NSURL)
+        }
     }
 
     private func keyColor(_ key: MusicalKey?) -> Color {
