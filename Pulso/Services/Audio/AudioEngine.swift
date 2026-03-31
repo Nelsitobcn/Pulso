@@ -124,8 +124,6 @@ final class AudioEngine: ObservableObject {
         faderA.outputVolume = initialGain
         faderB.outputVolume = initialGain
 
-        installVUMeterTap(on: faderA, deck: .left)
-        installVUMeterTap(on: faderB, deck: .right)
     }
 
     private func setupEQ(_ eq: AVAudioUnitEQ) {
@@ -425,27 +423,6 @@ final class AudioEngine: ObservableObject {
         saveSession()
     }
 
-    private func installVUMeterTap(on node: AVAudioMixerNode, deck: DeckChannel) {
-        node.removeTap(onBus: 0)
-        node.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            let rms = Self.calculateRMS(buffer: buffer)
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if deck == .left {
-                    self.vuLevelA = rms
-                } else {
-                    self.vuLevelB = rms
-                }
-            }
-        }
-    }
-
-    private static func calculateRMS(buffer: AVAudioPCMBuffer) -> Float {
-        guard let channel = buffer.floatChannelData?.pointee else { return 0 }
-        var rms: Float = 0
-        vDSP_rmsqv(channel, 1, &rms, vDSP_Length(buffer.frameLength))
-        return min(max(rms * 6, 0), 1)
-    }
 
     #if os(iOS)
     private func applyAudioLatencySetting() {
@@ -551,6 +528,10 @@ final class AudioEngine: ObservableObject {
                     return
                 }
 
+                // VU meter: leer outputVolume del fader como proxy de nivel
+                let fader = deck == .left ? self.faderA : self.faderB
+                let vu = fader.outputVolume
+                if deck == .left { self.vuLevelA = vu } else { self.vuLevelB = vu }
             }
         if deck == .left { timerA = timer } else { timerB = timer }
     }
