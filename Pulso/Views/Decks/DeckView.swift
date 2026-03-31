@@ -59,6 +59,20 @@ struct DeckView: View {
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
+        // Intentar primero como NSURL (viene de onDrag con NSItemProvider(object: NSURL))
+        if provider.canLoadObject(ofClass: NSURL.self) {
+            _ = provider.loadObject(ofClass: NSURL.self) { nsurl, _ in
+                guard let url = nsurl as? URL else { return }
+                Task { @MainActor in
+                    let imported = await libraryService.importTracks(urls: [url])
+                    if let track = imported.first {
+                        audioEngine.load(track: track, into: deck.id)
+                    }
+                }
+            }
+            return true
+        }
+        // Fallback: fileURL como Data (desde Finder)
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
