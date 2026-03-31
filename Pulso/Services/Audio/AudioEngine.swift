@@ -75,6 +75,10 @@ final class AudioEngine: ObservableObject {
         engine.connect(eqB,     to: faderB,   format: nil)
         engine.connect(faderB,  to: masterMixer, format: nil)
 
+        // TimePitch: rate cambia tempo, pitch = 0 para no cambiar tono
+        pitchA.pitch = 0
+        pitchB.pitch = 0
+
         // Configurar EQ como isolator DJ profesional
         configureIsolator(eqA)
         configureIsolator(eqB)
@@ -278,7 +282,12 @@ final class AudioEngine: ObservableObject {
         }
 
         deckState.currentTime = time
-        if wasPlaying { player.play() }
+        if wasPlaying {
+            player.play()
+            // Reiniciar timer para que lastRenderTime sea válido desde 0
+            stopTimer(deck: deck)
+            startTimer(deck: deck)
+        }
     }
 
     func sync(slave: DeckID) {
@@ -332,14 +341,31 @@ final class AudioEngine: ObservableObject {
     // MARK: - Timer de progreso + loop handler
 
     private func startTimer(deck: DeckID) {
-        let timer = Timer.publish(every: 0.02, on: .main, in: .common)
+        let interval: TimeInterval = 0.02
+        let timer = Timer.publish(every: interval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
-                let d = deck == .left ? self.deckA : self.deckB
+                let d      = deck == .left ? self.deckA : self.deckB
+                let player = deck == .left ? self.playerA : self.playerB
+                let fader  = deck == .left ? self.faderA : self.faderB
+
                 guard let duration = d.track?.duration else { return }
 
-                d.currentTime = min(d.currentTime + 0.02 * d.tempo, duration)
+                // Leer posición real del PlayerNode para máxima precisión
+                if let nodeTime = player.lastRenderTime,
+                   let playerTime = player.playerTime(forNodeTime: nodeTime) {
+                    let file = deck == .left ? self.fileA : self.fileB
+                    if let file {
+                        let sampleRate = file.processingFormat.sampleRate
+                        // sampleTime puede ser negativo justo al inicio, protegemos
+                        let sampleTime = max(0, playerTime.sampleTime)
+                        d.currentTime = min(Double(sampleTime) / sampleRate, duration)
+                    }
+                } else {
+                    // Fallback si el nodo aún no ha renderizado: avanzar por intervalo
+                    d.currentTime = min(d.currentTime + interval, duration)
+                }
 
                 // Loop: volver al inicio cuando llegamos al final del loop
                 if d.isLooping && d.currentTime >= d.loopEnd {
@@ -350,11 +376,11 @@ final class AudioEngine: ObservableObject {
                 if d.currentTime >= duration {
                     d.isPlaying = false
                     self.stopTimer(deck: deck)
+                    return
                 }
 
-                // VU meters desde outputVolume del fader
-                let fader = deck == .left ? self.faderA : self.faderB
-                let level = fader.outputVolume * Float(d.isPlaying ? Double.random(in: 0.6...1.0) : 0)
+                // VU meters: outputVolume del fader como proxy de nivel
+                let level = fader.outputVolume * Float(d.isPlaying ? Double.random(in: 0.65...1.0) : 0)
                 if deck == .left { self.vuLevelA = level }
                 else             { self.vuLevelB = level }
             }

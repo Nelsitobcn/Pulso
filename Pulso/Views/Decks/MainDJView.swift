@@ -65,7 +65,7 @@ struct MainDJView: View {
         }
         .fileImporter(
             isPresented: $isImporting,
-            allowedContentTypes: [.audio, .mp3],
+            allowedContentTypes: [.audio],
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result {

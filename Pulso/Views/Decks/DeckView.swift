@@ -14,20 +14,12 @@ struct DeckView: View {
             // Cabecera del deck
             DeckHeaderView(deck: deck)
 
-            // Waveform
-            WaveformView(deck: deck)
-                .frame(height: 80)
-                .overlay(
-                    GeometryReader { geo in
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture { location in
-                                let progress = location.x / geo.size.width
-                                let time = (deck.track?.duration ?? 0) * Double(progress)
-                                audioEngine.seek(to: time, deck: deck.id)
-                            }
-                    }
-                )
+            // Waveform — tap o drag para seek
+            WaveformView(deck: deck) { progress in
+                let time = (deck.track?.duration ?? 0) * progress
+                audioEngine.seek(to: time, deck: deck.id)
+            }
+            .frame(height: 80)
 
             // Plato giratorio (visual)
             TurntableView(isSpinning: deck.isPlaying)

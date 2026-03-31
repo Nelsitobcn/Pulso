@@ -3,16 +3,27 @@ import SwiftUI
 /// Visualización de la forma de onda de una pista con posición de reproducción
 struct WaveformView: View {
     @ObservedObject var deck: DeckState
+    let onSeek: (Double) -> Void   // recibe progress 0.0…1.0
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 // Waveform bars
                 if let waveform = deck.track?.waveformData, !waveform.isEmpty {
-                    WaveformBarsShape(samples: waveform, progress: deck.progress)
-                        .fill(waveformGradient(width: geo.size.width))
+                    // Barras ya reproducidas (más brillante)
+                    WaveformBarsShape(samples: waveform, from: 0, to: deck.progress)
+                        .fill(LinearGradient(
+                            colors: [Color.accentColor, Color.accentColor.opacity(0.6)],
+                            startPoint: .top, endPoint: .bottom
+                        ))
+
+                    // Barras pendientes (más tenue)
+                    WaveformBarsShape(samples: waveform, from: deck.progress, to: 1)
+                        .fill(LinearGradient(
+                            colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.15)],
+                            startPoint: .top, endPoint: .bottom
+                        ))
                 } else {
-                    // Placeholder cuando no hay canción
                     Rectangle()
                         .fill(Color.gray.opacity(0.15))
                         .overlay(
@@ -38,45 +49,45 @@ struct WaveformView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            // Gesture para seek
+            .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        _ = value.location.x / geo.size.width
+                        let progress = max(0, min(1, value.location.x / geo.size.width))
+                        onSeek(Double(progress))
                     }
             )
         }
     }
-
-    private func waveformGradient(width: CGFloat) -> LinearGradient {
-        LinearGradient(
-            colors: [Color.accentColor.opacity(0.9), Color.accentColor.opacity(0.5)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
 }
 
-/// Shape que dibuja las barras de la waveform
+/// Shape que dibuja las barras de waveform en un rango de progreso [from, to]
 struct WaveformBarsShape: Shape {
     let samples: [Float]
-    let progress: Double
+    let from: Double    // 0.0 … 1.0
+    let to: Double      // 0.0 … 1.0
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         guard !samples.isEmpty else { return path }
 
-        let barWidth = rect.width / CGFloat(samples.count)
+        let count = samples.count
+        let barWidth = rect.width / CGFloat(count)
         let centerY = rect.midY
 
-        for (i, sample) in samples.enumerated() {
+        let startIdx = Int((from * Double(count)).rounded(.up))
+        let endIdx   = Int((to   * Double(count)).rounded(.down))
+        guard startIdx <= endIdx else { return path }
+
+        for i in startIdx...endIdx {
+            guard i < count else { break }
             let x = CGFloat(i) * barWidth
-            let height = CGFloat(sample) * rect.height * 0.9
+            let height = CGFloat(samples[i]) * rect.height * 0.9
             let barRect = CGRect(
                 x: x + barWidth * 0.1,
                 y: centerY - height / 2,
                 width: barWidth * 0.8,
-                height: height
+                height: max(1, height)
             )
             path.addRoundedRect(in: barRect, cornerSize: CGSize(width: 1, height: 1))
         }
