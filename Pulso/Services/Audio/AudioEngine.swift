@@ -429,7 +429,7 @@ final class AudioEngine: ObservableObject {
         node.removeTap(onBus: 0)
         node.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             let rms = Self.calculateRMS(buffer: buffer)
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 if deck == .left {
                     self.vuLevelA = rms
