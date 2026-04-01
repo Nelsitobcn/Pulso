@@ -63,13 +63,17 @@ final class AudioEngine: ObservableObject {
     private var fileA: AVAudioFile?
     private var fileB: AVAudioFile?
 
-    // Frame de inicio del segmento programado (para calcular currentTime)
-    private var segStartA: AVAudioFramePosition = 0
-    private var segStartB: AVAudioFramePosition = 0
+    // Tiempo de audio (segundos) donde se pausó — fuente de verdad
+    private var pausedAtA: TimeInterval = 0
+    private var pausedAtB: TimeInterval = 0
 
-    // Frame donde se pausó (para reanudar)
-    private var pausedAtA: AVAudioFramePosition = 0
-    private var pausedAtB: AVAudioFramePosition = 0
+    // CACurrentMediaTime() cuando arrancó el play más reciente
+    private var playHostTimeA: Double = 0
+    private var playHostTimeB: Double = 0
+
+    // Tempo en el momento de play (para calcular tiempo correcto)
+    private var playTempoA: Double = 1.0
+    private var playTempoB: Double = 1.0
 
     private var cancellables = Set<AnyCancellable>()
     private var timerA: AnyCancellable?
@@ -220,13 +224,18 @@ final class AudioEngine: ObservableObject {
 
         if player.isPlaying { player.stop() }
         stopTimer(deck: deck)
-        resetPosition(deck: deck, frame: 0)
+        if deck == .left { pausedAtA = 0 } else { pausedAtB = 0 }
 
         do {
             let file = try AVAudioFile(forReading: track.url)
             if deck == .left { fileA = file } else { fileB = file }
 
-            scheduleSegment(file: file, from: 0, deck: deck)
+            scheduleFromBeginning(file: file, deck: deck)
+
+            // Resetear pitch node al formato del archivo
+            let pitch = deck == .left ? pitchA : pitchB
+            pitch.rate  = Float(deckState.tempo)
+            pitch.pitch = 0
 
             deckState.track       = track
             deckState.currentTime = 0
@@ -235,7 +244,6 @@ final class AudioEngine: ObservableObject {
             deckState.loopStart   = 0
             deckState.loopEnd     = 0
             deckState.hotCues     = []
-            print("[AudioEngine] ✅ Cargado '\(track.title)' en deck \(deck.rawValue)")
             saveSession()
         } catch {
             print("[AudioEngine] ❌ Error cargando \(track.title): \(error)")
@@ -248,80 +256,153 @@ final class AudioEngine: ObservableObject {
         guard deckState.track != nil else { return }
 
         if deckState.isPlaying {
-            // ── PAUSA ──
-            let frame = liveFrame(deck: deck)
-            if deck == .left { pausedAtA = frame } else { pausedAtB = frame }
-
+            // ── PAUSA: guardar tiempo actual ──
+            if deck == .left {
+                pausedAtA = currentAudioTime(deck: deck)
+            } else {
+                pausedAtB = currentAudioTime(deck: deck)
+            }
             player.stop()
-            // Desconectar y reconectar el fader para limpiar buffers pendientes
-            engine.disconnectNodeOutput(player)
-            let pitch = deck == .left ? pitchA : pitchB
-            engine.connect(player, to: pitch, format: nil)
-
             stopTimer(deck: deck)
             deckState.isPlaying = false
-            print("[AudioEngine] ⏸ Deck \(deck.rawValue) pausado en frame \(frame)")
             saveSession()
-
         } else {
-            // ── PLAY / REANUDAR ──
-            let file = deck == .left ? fileA : fileB
-            guard let file else { return }
-
-            let from = deck == .left ? pausedAtA : pausedAtB
-            scheduleSegment(file: file, from: from, deck: deck)
-            player.play()
-            startTimer(deck: deck)
-            deckState.isPlaying = true
-            print("[AudioEngine] ▶ Deck \(deck.rawValue) play desde frame \(from)")
-            saveSession()
+            // ── PLAY / REANUDAR desde donde se pausó ──
+            let pausedAt = deck == .left ? pausedAtA : pausedAtB
+            startPlayback(from: pausedAt, deck: deck)
         }
     }
 
     func seek(to time: TimeInterval, deck: DeckID) {
+        let deckState = deck == .left ? deckA : deckB
+        guard deckState.track != nil else { return }
+        let wasPlaying = deckState.isPlaying
+        let player = deck == .left ? playerA : playerB
+        player.stop()
+        stopTimer(deck: deck)
+        if deck == .left { pausedAtA = time } else { pausedAtB = time }
+        deckState.currentTime = time
+        if wasPlaying {
+            startPlayback(from: time, deck: deck)
+        }
+        saveSession()
+    }
+
+    // Inicia reproducción desde un tiempo dado (siempre hace play)
+    private func startPlayback(from time: TimeInterval, deck: DeckID) {
         let player    = deck == .left ? playerA : playerB
         let deckState = deck == .left ? deckA   : deckB
         let file      = deck == .left ? fileA   : fileB
-        guard let file, deckState.track != nil else { return }
+        let pitch     = deck == .left ? pitchA  : pitchB
+        guard let file else { return }
 
         let sr          = file.processingFormat.sampleRate
         let targetFrame = AVAudioFramePosition(max(0, time) * sr)
         guard targetFrame < file.length else { return }
 
-        let wasPlaying = deckState.isPlaying
         player.stop()
-        stopTimer(deck: deck)
-
-        resetPosition(deck: deck, frame: targetFrame)
         scheduleSegment(file: file, from: targetFrame, deck: deck)
-        deckState.currentTime = time
 
-        if wasPlaying {
-            player.play()
-            startTimer(deck: deck)
-            deckState.isPlaying = true
+        // Reaplicar rate/pitch antes de play para asegurar que está activo
+        let rate = max(deckState.tempo, 0.01)
+        pitch.rate  = Float(rate)
+        pitch.pitch = deckState.keyLock ? 0 : Float(-1200.0 * log2(rate))
+
+        player.play()
+
+        // Registrar el momento de inicio para el timer
+        let tempo = deckState.tempo
+        if deck == .left {
+            pausedAtA    = time
+            playHostTimeA = CACurrentMediaTime()
+            playTempoA   = tempo
+        } else {
+            pausedAtB    = time
+            playHostTimeB = CACurrentMediaTime()
+            playTempoB   = tempo
         }
+
+        deckState.currentTime = time
+        deckState.isPlaying   = true
+        startTimer(deck: deck)
         saveSession()
+    }
+
+    /// TEST DIRECTO: cambia rate del nodo sin pasar por observers
+    func testSetRate(_ rate: Float, deck: DeckID) {
+        let pitch = deck == .left ? pitchA : pitchB
+        pitch.rate = rate
+    }
+
+    /// Aplica tempo directo al nodo AVAudioUnitTimePitch (llamado desde slider)
+    func applyTempo(_ newRate: Double, deck: DeckID) {
+        let pitch     = deck == .left ? pitchA : pitchB
+        let deckState = deck == .left ? deckA  : deckB
+        let rate      = max(newRate, 0.01)
+
+        pitch.rate  = Float(rate)
+        pitch.pitch = deckState.keyLock ? 0 : Float(-1200.0 * log2(rate))
+
+        if deckState.isPlaying {
+            let currentT = currentAudioTime(deck: deck)
+            if deck == .left {
+                pausedAtA     = currentT
+                playHostTimeA = CACurrentMediaTime()
+                playTempoA    = rate
+            } else {
+                pausedAtB     = currentT
+                playHostTimeB = CACurrentMediaTime()
+                playTempoB    = rate
+            }
+        }
     }
 
     func sync(slave: DeckID) {
         let masterDeck = slave == .left ? deckB : deckA
         let slaveDeck  = slave == .left ? deckA : deckB
+        let slavePitch = slave == .left ? pitchA : pitchB
         guard let masterBPM = masterDeck.track?.bpm,
               let slaveBPM  = slaveDeck.track?.bpm,
-              slaveBPM > 0 else {
-            print("[AudioEngine] sync: BPM no disponible")
-            return
+              slaveBPM > 0 else { return }
+
+        let newRate = masterBPM / slaveBPM
+
+        // Aplicar directamente al nodo de audio (igual que testSetRate)
+        slavePitch.rate  = Float(newRate)
+        slavePitch.pitch = slaveDeck.keyLock ? 0 : Float(-1200.0 * log2(newRate))
+
+        // Actualizar estado para que el timer y UI sean consistentes
+        if slaveDeck.isPlaying {
+            let currentT = currentAudioTime(deck: slave)
+            if slave == .left {
+                pausedAtA     = currentT
+                playHostTimeA = CACurrentMediaTime()
+                playTempoA    = newRate
+            } else {
+                pausedAtB     = currentT
+                playHostTimeB = CACurrentMediaTime()
+                playTempoB    = newRate
+            }
         }
-        slaveDeck.tempo = masterBPM / slaveBPM
-        print("[AudioEngine] 🔄 Sync deck \(slave.rawValue): rate=\(String(format:"%.3f", slaveDeck.tempo))")
+        slaveDeck.tempo = newRate  // actualiza UI (bpmDisplay)
         saveSession()
     }
 
+    /// Comportamiento CDJ: si reproduciendo → marca cue; si pausado → salta al cue marcado
     func setCue(deck: DeckID) {
-        setHotCue(deck: deck, index: 0)
+        let d = deck == .left ? deckA : deckB
+        if d.isPlaying {
+            // Marca el cue en la posición actual
+            setHotCue(deck: deck, index: 0)
+        } else {
+            // Parado: salta al cue marcado sin arrancar (preview)
+            if d.hotCues.contains(where: { $0.index == 0 }) {
+                seek(to: d.hotCues.first(where: { $0.index == 0 })!.time, deck: deck)
+            }
+        }
     }
 
+    /// Shift+CUE: salta al cue marcado y hace play
     func jumpToCue(deck: DeckID) {
         jumpToHotCue(deck: deck, index: 0)
     }
@@ -350,7 +431,14 @@ final class AudioEngine: ObservableObject {
     func jumpToHotCue(deck: DeckID, index: Int) {
         let d = deck == .left ? deckA : deckB
         guard let cue = d.hotCues.first(where: { $0.index == index }) else { return }
-        seek(to: cue.time, deck: deck)
+        // Hot cue siempre arranca play (comportamiento estándar DJ)
+        startPlayback(from: cue.time, deck: deck)
+    }
+
+    func deleteHotCue(deck: DeckID, index: Int) {
+        let d = deck == .left ? deckA : deckB
+        d.hotCues.removeAll { $0.index == index }
+        saveSession()
     }
 
     func toggleLoop(deck: DeckID) {
@@ -378,51 +466,59 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Internos
 
+    private func scheduleFromBeginning(file: AVAudioFile, deck: DeckID) {
+        scheduleSegment(file: file, from: 0, deck: deck)
+    }
+
     private func scheduleSegment(file: AVAudioFile, from frame: AVAudioFramePosition, deck: DeckID) {
         let player = deck == .left ? playerA : playerB
         let d      = deck == .left ? deckA   : deckB
         guard frame < file.length else { return }
 
         let count = AVAudioFrameCount(file.length - frame)
-        if deck == .left { segStartA = frame } else { segStartB = frame }
-
         player.scheduleSegment(file, startingFrame: frame, frameCount: count, at: nil,
                                completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, !d.isLooping else { return }
                 d.isPlaying = false
                 self.stopTimer(deck: deck)
-                self.resetPosition(deck: deck, frame: 0)
-                print("[AudioEngine] 🏁 Fin pista deck \(deck.rawValue)")
+                if deck == .left { self.pausedAtA = 0; self.playHostTimeA = 0 }
+                else             { self.pausedAtB = 0; self.playHostTimeB = 0 }
             }
         }
     }
 
-    /// Frame real actual del player en el archivo
-    private func liveFrame(deck: DeckID) -> AVAudioFramePosition {
-        let player   = deck == .left ? playerA : playerB
-        let segStart = deck == .left ? segStartA : segStartB
-        guard let nodeTime   = player.lastRenderTime,
-              let playerTime = player.playerTime(forNodeTime: nodeTime)
-        else { return segStart }
-        return max(segStart, segStart + playerTime.sampleTime)
-    }
-
-    private func resetPosition(deck: DeckID, frame: AVAudioFramePosition) {
-        if deck == .left { segStartA = frame; pausedAtA = frame }
-        else             { segStartB = frame; pausedAtB = frame }
+    /// Tiempo de audio actual en segundos usando CACurrentMediaTime (siempre funciona)
+    private func currentAudioTime(deck: DeckID) -> TimeInterval {
+        let pausedAt  = deck == .left ? pausedAtA   : pausedAtB
+        let hostStart = deck == .left ? playHostTimeA : playHostTimeB
+        let tempo     = deck == .left ? playTempoA  : playTempoB
+        guard hostStart > 0 else { return pausedAt }
+        let elapsed = (CACurrentMediaTime() - hostStart) * tempo
+        return pausedAt + elapsed
     }
 
     private func updateTimePitch(for deck: DeckChannel) {
-        let state = deck == .left ? deckA : deckB
-        let pitch = deck == .left ? pitchA : pitchB
-        let rate = max(state.tempo, 0.01)
+        let state  = deck == .left ? deckA  : deckB
+        let pitch  = deck == .left ? pitchA : pitchB
+        let deckID: DeckID = deck == .left ? .left : .right
+        let rate   = max(state.tempo, 0.01)
 
         pitch.rate = Float(rate)
-        if state.keyLock {
-            pitch.pitch = 0
-        } else {
-            pitch.pitch = Float(-1200.0 * log2(rate))
+        pitch.pitch = state.keyLock ? 0 : Float(-1200.0 * log2(rate))
+
+        // Actualizar base time para que currentAudioTime no salte al cambiar tempo
+        if state.isPlaying {
+            let currentT = currentAudioTime(deck: deckID)
+            if deck == .left {
+                pausedAtA    = currentT
+                playHostTimeA = CACurrentMediaTime()
+                playTempoA   = rate
+            } else {
+                pausedAtB    = currentT
+                playHostTimeB = CACurrentMediaTime()
+                playTempoB   = rate
+            }
         }
         saveSession()
     }
@@ -510,13 +606,12 @@ final class AudioEngine: ObservableObject {
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
-                let d    = deck == .left ? self.deckA    : self.deckB
-                let file = deck == .left ? self.fileA    : self.fileB
-                guard let file, let dur = d.track?.duration else { return }
+                let d   = deck == .left ? self.deckA : self.deckB
+                guard let dur = d.track?.duration else { return }
 
-                // Posición real
-                let frame = self.liveFrame(deck: deck)
-                d.currentTime = min(Double(frame) / file.processingFormat.sampleRate, dur)
+                // Posición usando CACurrentMediaTime (siempre avanza)
+                let t = self.currentAudioTime(deck: deck)
+                d.currentTime = min(t, dur)
 
                 // Loop
                 if d.isLooping && d.currentTime >= d.loopEnd {

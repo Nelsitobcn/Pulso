@@ -1,5 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import os.log
+
+private let logger = Logger(subsystem: "com.pulso.dj", category: "HotCue")
 
 /// Vista de un deck individual (A o B)
 struct DeckView: View {
@@ -150,7 +153,9 @@ struct TransportControlsView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // CUE: click = marcar, shift+click = saltar al cue
+            // CUE: reproduciendo → marca; pausado → salta; shift+click → salta y play
+            let hasCue = (deck.id == .left ? audioEngine.deckA : audioEngine.deckB)
+                .hotCues.contains(where: { $0.index == 0 })
             Button {
                 #if os(macOS)
                 if NSEvent.modifierFlags.contains(.shift) {
@@ -165,13 +170,11 @@ struct TransportControlsView: View {
                 Text("CUE")
                     .font(.caption.bold())
                     .frame(width: 48, height: 36)
-                    .background(deck.id == .left
-                        ? (audioEngine.deckA.hotCues.isEmpty ? Color("ButtonCue") : Color.yellow.opacity(0.8))
-                        : (audioEngine.deckB.hotCues.isEmpty ? Color("ButtonCue") : Color.yellow.opacity(0.8)))
+                    .background(hasCue ? Color.yellow.opacity(0.85) : Color("ButtonCue"))
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
-            .help("Click: marcar cue | Shift+Click: saltar al cue")
+            .help("Play → marca aquí | Pausa → salta al cue | Shift → salta y play")
 
             Button {
                 deck.keyLock.toggle()
@@ -210,6 +213,23 @@ struct TransportControlsView: View {
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
+
+            // TEST TEMPO — pulsa para oír si AVAudioUnitTimePitch funciona
+            Button {
+                Task {
+                    audioEngine.testSetRate(1.5, deck: deck.id)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    audioEngine.testSetRate(1.0, deck: deck.id)
+                }
+            } label: {
+                Text("T")
+                    .font(.caption.bold())
+                    .frame(width: 28, height: 36)
+                    .background(Color.red.opacity(0.7))
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .help("TEST: acelera 2s y vuelve — confirma si TimePitch funciona")
         }
         .foregroundStyle(.white)
     }
@@ -222,39 +242,49 @@ struct HotCuePadsView: View {
     var body: some View {
         HStack(spacing: 8) {
             ForEach(0..<4, id: \.self) { index in
-                let cue = deck.hotCues.first(where: { $0.index == index })
-                Button {
-                    if cue != nil {
-                        audioEngine.jumpToHotCue(deck: deck.id, index: index)
-                    } else {
-                        audioEngine.setHotCue(deck: deck.id, index: index)
-                    }
-                } label: {
-                    Text("C\(index + 1)")
-                        .font(.caption.bold())
-                        .frame(width: 42, height: 28)
-                        .background(backgroundColor(for: cue))
-                        .foregroundStyle(foregroundColor(for: cue))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .onLongPressGesture {
-                    audioEngine.setHotCue(deck: deck.id, index: index)
-                }
-                .help("Click: ir al hot cue | Long press: guardar posición actual")
+                HotCuePad(deck: deck, index: index)
             }
         }
     }
+}
 
-    private func backgroundColor(for cue: HotCue?) -> Color {
-        if let cue {
-            return cue.color.swiftUIColor
+struct HotCuePad: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+    let index: Int
+
+    var cue: HotCue? { deck.hotCues.first(where: { $0.index == index }) }
+
+    var body: some View {
+        Button {
+            #if os(macOS)
+            if NSEvent.modifierFlags.contains(.shift) {
+                logger.info("DELETE deck=\(self.deck.id.rawValue) index=\(self.index)")
+                audioEngine.deleteHotCue(deck: deck.id, index: index)
+            } else if cue != nil {
+                logger.info("JUMP deck=\(self.deck.id.rawValue) index=\(self.index) time=\(self.cue!.time)")
+                audioEngine.jumpToHotCue(deck: deck.id, index: index)
+            } else {
+                logger.info("SET deck=\(self.deck.id.rawValue) index=\(self.index) currentTime=\(self.deck.currentTime)")
+                audioEngine.setHotCue(deck: deck.id, index: index)
+            }
+            #else
+            if cue != nil {
+                audioEngine.jumpToHotCue(deck: deck.id, index: index)
+            } else {
+                audioEngine.setHotCue(deck: deck.id, index: index)
+            }
+            #endif
+        } label: {
+            Text("C\(index + 1)")
+                .font(.caption.bold())
+                .frame(width: 42, height: 28)
+                .background(cue != nil ? cue!.color.swiftUIColor : Color.white.opacity(0.08))
+                .foregroundStyle(cue != nil ? Color.white : Color.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
         }
-        return Color.white.opacity(0.08)
-    }
-
-    private func foregroundColor(for cue: HotCue?) -> Color {
-        cue == nil ? .secondary : .white
+        .buttonStyle(.plain)
+        .help(cue != nil ? "Click: saltar | Shift+Click: borrar" : "Click: marcar cue aquí")
     }
 }
 
@@ -326,6 +356,7 @@ struct LoopControlsView: View {
 
 struct TempoSliderView: View {
     @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
 
     private let range = 0.85...1.15  // ±15% tempo
 
@@ -337,6 +368,9 @@ struct TempoSliderView: View {
 
             Slider(value: $deck.tempo, in: range)
                 .tint(Color.accentColor)
+                .onChange(of: deck.tempo) { _, newRate in
+                    audioEngine.applyTempo(newRate, deck: deck.id)
+                }
 
             Text("+15%")
                 .font(.caption2)
