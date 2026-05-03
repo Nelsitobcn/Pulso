@@ -25,7 +25,7 @@ struct MainDJView: View {
 
                 // Centro: crossfader + controles master
                 CenterControlsView()
-                    .frame(width: 180)
+                    .frame(width: 240)
 
                 // Deck B
                 DeckView(deck: audioEngine.deckB)

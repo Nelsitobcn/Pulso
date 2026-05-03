@@ -13,48 +13,56 @@ struct DeckView: View {
     @State private var isDragTarget = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Cabecera del deck
-            DeckHeaderView(deck: deck)
+        VStack(spacing: 8) {
+            // Header compacto (BPM grande + título)
+            DeckHeaderViewVDJ(deck: deck)
 
             // Waveform — tap o drag para seek
             WaveformView(deck: deck) { progress in
                 let time = (deck.track?.duration ?? 0) * progress
                 audioEngine.seek(to: time, deck: deck.id)
             }
-            .frame(height: 80)
+            .frame(height: 56)
 
-            HotCuePadsView(deck: deck)
+            // Layout principal: 3 columnas (FX | Plato | Pitch)
+            HStack(alignment: .top, spacing: 10) {
+                // ─── COLUMNA IZQUIERDA: FX + Loop ───
+                VStack(spacing: 6) {
+                    FXRowsView()
+                    Spacer(minLength: 4)
+                    LoopControlsView(deck: deck)
+                }
+                .frame(width: 175)
 
-            // Plato giratorio (visual)
-            TurntableView(isSpinning: deck.isPlaying)
-                .frame(width: 140, height: 140)
+                // ─── COLUMNA CENTRAL: Plato + Hot cues + Transport ───
+                VStack(spacing: 8) {
+                    TurntableView(isSpinning: deck.isPlaying)
+                        .frame(width: 200, height: 200)
 
-            // Controles de transporte
-            TransportControlsView(deck: deck)
+                    HotCuePadsView(deck: deck)
 
-            // EQ
-            EQView(deck: deck)
+                    TransportControlsView(deck: deck)
+                }
+                .frame(maxWidth: .infinity)
 
-            // Loop controls
-            LoopControlsView(deck: deck)
-
-            // Pitch/tempo
-            TempoSliderView(deck: deck)
+                // ─── COLUMNA DERECHA: Pitch slider vertical ───
+                VerticalPitchSlider(deck: deck)
+                    .frame(width: 56)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .padding(12)
+        .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(Color("BGDeck"))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 14)
                         .strokeBorder(
                             isDragTarget ? Color.accentColor : Color.clear,
                             lineWidth: 2
                         )
                 )
         )
-        // Drag & drop desde Finder o biblioteca
         .onDrop(of: [.audio, .fileURL], isTargeted: $isDragTarget) { providers in
             handleDrop(providers: providers)
         }
@@ -87,6 +95,167 @@ struct DeckView: View {
             }
         }
         return true
+    }
+}
+
+// MARK: - Header VirtualDJ compacto
+
+struct DeckHeaderViewVDJ: View {
+    @ObservedObject var deck: DeckState
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Deck label A/B
+            Text(deck.id.rawValue)
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 26)
+
+            // Título / Artista
+            VStack(alignment: .leading, spacing: 1) {
+                Text(deck.track?.title ?? "Arrastre una canción a este deck para cargarlo")
+                    .font(.system(size: deck.track == nil ? 13 : 14, weight: .semibold))
+                    .foregroundStyle(deck.track == nil ? Color.white.opacity(0.4) : .white)
+                    .lineLimit(1)
+                if let artist = deck.track?.artist, !artist.isEmpty {
+                    Text(artist)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer()
+
+            // BPM grande
+            VStack(alignment: .center, spacing: 0) {
+                Text("BPM")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                Text(deck.bpmDisplay)
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.accentColor)
+                    .monospacedDigit()
+            }
+
+            // KEY
+            VStack(alignment: .center, spacing: 0) {
+                Text("KEY")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                Text(deck.keyDisplay)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(height: 36)
+        .padding(.horizontal, 6)
+    }
+}
+
+// MARK: - Pitch slider vertical estilo VirtualDJ
+
+struct VerticalPitchSlider: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+
+    private let range = 0.85...1.15
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("+15%")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.tertiary)
+
+            GeometryReader { geo in
+                let height = geo.size.height
+                let normalized = (deck.tempo - range.lowerBound) / (range.upperBound - range.lowerBound)
+                let knobY = height * (1 - normalized)
+
+                ZStack {
+                    // Track
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.black.opacity(0.4))
+                        .frame(width: 4)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2)
+                                .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
+                        )
+
+                    // Center mark (line at 0%)
+                    Rectangle()
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 18, height: 1)
+
+                    // Tick marks each 5%
+                    ForEach(0..<7, id: \.self) { i in
+                        let pos = CGFloat(i) / 6.0
+                        Rectangle()
+                            .fill(Color.white.opacity(0.15))
+                            .frame(width: 8, height: 0.5)
+                            .offset(y: height * (pos - 0.5))
+                    }
+
+                    // Handle
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white, Color.gray.opacity(0.85)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 26, height: 12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(Color.black.opacity(0.3), lineWidth: 0.5)
+                        )
+                        .overlay(
+                            Rectangle()
+                                .fill(Color.black.opacity(0.4))
+                                .frame(width: 18, height: 1)
+                        )
+                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                        .position(x: geo.size.width / 2, y: knobY)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { drag in
+                            let normalized = 1.0 - max(0, min(1, drag.location.y / height))
+                            let newRate = range.lowerBound + Double(normalized) * (range.upperBound - range.lowerBound)
+                            deck.tempo = newRate
+                            audioEngine.applyTempo(newRate, deck: deck.id)
+                        }
+                )
+                .onTapGesture(count: 2) {
+                    deck.tempo = 1.0
+                    audioEngine.applyTempo(1.0, deck: deck.id)
+                }
+            }
+            .frame(maxHeight: .infinity)
+
+            Text("-15%")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.tertiary)
+
+            // Pitch percentage label
+            Text(pitchLabel)
+                .font(.system(size: 9, design: .monospaced).bold())
+                .foregroundStyle(deck.tempo == 1.0 ? Color.white.opacity(0.4) : Color.accentColor)
+                .frame(width: 50)
+                .padding(.vertical, 2)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(3)
+        }
+    }
+
+    private var pitchLabel: String {
+        let pct = (deck.tempo - 1.0) * 100
+        if abs(pct) < 0.05 { return "±0.0%" }
+        return String(format: "%+.1f%%", pct)
     }
 }
 
@@ -152,10 +321,11 @@ struct TransportControlsView: View {
     @EnvironmentObject var audioEngine: AudioEngine
 
     var body: some View {
-        HStack(spacing: 16) {
-            // CUE: reproduciendo → marca; pausado → salta; shift+click → salta y play
+        HStack(spacing: 6) {
             let hasCue = (deck.id == .left ? audioEngine.deckA : audioEngine.deckB)
                 .hotCues.contains(where: { $0.index == 0 })
+
+            // CUE
             Button {
                 #if os(macOS)
                 if NSEvent.modifierFlags.contains(.shift) {
@@ -168,35 +338,39 @@ struct TransportControlsView: View {
                 #endif
             } label: {
                 Text("CUE")
-                    .font(.caption.bold())
-                    .frame(width: 48, height: 36)
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
                     .background(hasCue ? Color.yellow.opacity(0.85) : Color("ButtonCue"))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
             }
             .buttonStyle(.plain)
             .help("Play → marca aquí | Pausa → salta al cue | Shift → salta y play")
 
+            // KEY LOCK
             Button {
                 deck.keyLock.toggle()
             } label: {
                 Text("KEY")
-                    .font(.caption.bold())
-                    .frame(width: 48, height: 36)
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
                     .background(deck.keyLock ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.1))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
             }
             .buttonStyle(.plain)
             .help("Bloquear o liberar la tonalidad al cambiar tempo")
 
-            // PLAY / PAUSE
+            // PLAY / PAUSE (más prominente)
             Button {
                 audioEngine.togglePlay(deck: deck.id)
             } label: {
                 Image(systemName: deck.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title2)
-                    .frame(width: 56, height: 48)
+                    .font(.system(size: 16))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
                     .background(deck.isPlaying ? Color.orange : Color.accentColor)
-                    .cornerRadius(10)
+                    .cornerRadius(8)
             }
             .buttonStyle(.plain)
             .keyboardShortcut(deck.id == .left ? KeyEquivalent("q") : KeyEquivalent("p"),
@@ -206,30 +380,14 @@ struct TransportControlsView: View {
             Button {
                 audioEngine.sync(slave: deck.id)
             } label: {
-                Text("SYNC")
-                    .font(.caption.bold())
-                    .frame(width: 48, height: 36)
+                Text("SINC")
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
                     .background(Color("ButtonSync"))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
             }
             .buttonStyle(.plain)
-
-            // TEST TEMPO — pulsa para oír si AVAudioUnitTimePitch funciona
-            Button {
-                Task {
-                    audioEngine.testSetRate(1.5, deck: deck.id)
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    audioEngine.testSetRate(1.0, deck: deck.id)
-                }
-            } label: {
-                Text("T")
-                    .font(.caption.bold())
-                    .frame(width: 28, height: 36)
-                    .background(Color.red.opacity(0.7))
-                    .cornerRadius(8)
-            }
-            .buttonStyle(.plain)
-            .help("TEST: acelera 2s y vuelve — confirma si TimePitch funciona")
         }
         .foregroundStyle(.white)
     }
@@ -375,6 +533,113 @@ struct TempoSliderView: View {
             Text("+15%")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+// MARK: - FX Rows estilo VirtualDJ
+
+/// 3 filas de FX (ECHO / STEMS / BRAKESTART) cada una con dropdown + 3 mini-knobs
+struct FXRowsView: View {
+    @State private var fxEcho1: Double = 0
+    @State private var fxEcho2: Double = 0
+    @State private var fxEcho3: Double = 0
+    @State private var fxStems1: Double = 0
+    @State private var fxStems2: Double = 0
+    @State private var fxStems3: Double = 0
+    @State private var fxBrake1: Double = 0
+    @State private var fxBrake2: Double = 0
+    @State private var fxBrake3: Double = 0
+
+    @State private var selectedFX1 = "ECHO"
+    @State private var selectedFX2 = "STEMS"
+    @State private var selectedFX3 = "BRAKE"
+
+    var body: some View {
+        VStack(spacing: 4) {
+            fxRow(label: selectedFX1, options: ["ECHO", "REVERB", "FILTER", "FLANGER"], onSelect: { selectedFX1 = $0 },
+                  k1: $fxEcho1, k2: $fxEcho2, k3: $fxEcho3, color: .cyan)
+
+            fxRow(label: selectedFX2, options: ["STEMS", "PITCH", "BEAT"], onSelect: { selectedFX2 = $0 },
+                  k1: $fxStems1, k2: $fxStems2, k3: $fxStems3, color: .mint)
+
+            fxRow(label: selectedFX3, options: ["BRAKE", "BRAKESTART", "LOOP", "ROLL"], onSelect: { selectedFX3 = $0 },
+                  k1: $fxBrake1, k2: $fxBrake2, k3: $fxBrake3, color: .purple)
+        }
+    }
+
+    private func fxRow(label: String, options: [String], onSelect: @escaping (String) -> Void,
+                       k1: Binding<Double>, k2: Binding<Double>, k3: Binding<Double>, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Menu {
+                ForEach(options, id: \.self) { opt in
+                    Button(opt) { onSelect(opt) }
+                }
+            } label: {
+                Text(label)
+                    .font(.system(size: 8, weight: .bold))
+                    .lineLimit(1)
+                    .frame(width: 56, height: 22)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(3)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .menuStyle(.borderlessButton)
+
+            MiniKnob(value: k1, color: color)
+            MiniKnob(value: k2, color: color)
+            MiniKnob(value: k3, color: color)
+        }
+    }
+}
+
+/// Mini knob 24x24 para FX (sin label)
+struct MiniKnob: View {
+    @Binding var value: Double  // -1.0 a +1.0
+    let color: Color
+
+    @State private var lastDragY: CGFloat = 0
+    @State private var isDragging = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(Color.gray.opacity(0.3), lineWidth: 2)
+                .frame(width: 24, height: 24)
+
+            Circle()
+                .trim(from: 0.1, to: max(0.105, 0.1 + 0.8 * ((value + 1) / 2)))
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .frame(width: 24, height: 24)
+                .rotationEffect(.degrees(-225))
+
+            Rectangle()
+                .fill(Color.white)
+                .frame(width: 1.5, height: 7)
+                .offset(y: -6)
+                .rotationEffect(.degrees(value * 135))
+        }
+        .frame(width: 24, height: 24)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    if !isDragging {
+                        isDragging = true
+                        lastDragY = drag.location.y
+                        return
+                    }
+                    let delta = Double(lastDragY - drag.location.y) / 60.0
+                    lastDragY = drag.location.y
+                    value = max(-1.0, min(1.0, value + delta))
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    lastDragY = 0
+                }
+        )
+        .onLongPressGesture(minimumDuration: 0.5) {
+            value = 0
         }
     }
 }
