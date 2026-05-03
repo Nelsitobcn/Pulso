@@ -4,31 +4,105 @@ struct TopBarView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var libraryService: LibraryService
 
+    @State private var selectedDesign = "Defecto"
+    @State private var selectedDesempen = "Defecto"
+    @State private var selectedRack = "Elegir"
+    @State private var isMaestroActive = false
+    @State private var cpuPercent: Int = 3
+    @State private var currentTime = "00:00:00"
+
     var body: some View {
-        HStack {
-            // Estado de análisis
-            if libraryService.isAnalyzing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Analizando \(Int(libraryService.analysisProgress * 100))%...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        HStack(spacing: 12) {
+            // Nombre DJ (izquierda)
+            Text(authService.djName)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+
+            // DISEÑO ▾
+            Picker("Diseño", selection: $selectedDesign) {
+                Text("Defecto").tag("Defecto")
             }
+            .pickerStyle(.menu)
+            .frame(width: 90)
+
+            // DESEMPEÑO ▾
+            Picker("Desempeño", selection: $selectedDesempen) {
+                Text("Defecto").tag("Defecto")
+            }
+            .pickerStyle(.menu)
+            .frame(width: 100)
 
             Spacer()
 
-            // Nombre de DJ y plan
-            HStack(spacing: 8) {
-                Text(authService.djName)
+            // RACK ▾
+            Picker("Rack", selection: $selectedRack) {
+                Text("Elegir").tag("Elegir")
+            }
+            .pickerStyle(.menu)
+            .frame(width: 80)
+
+            // ELEGIR ▾
+            Picker("Elegir", selection: $selectedDesign) {
+                Text("Defecto").tag("Defecto")
+            }
+            .pickerStyle(.menu)
+            .frame(width: 80)
+
+            Spacer()
+
+            // Botón MAESTRO
+            Button(action: { isMaestroActive.toggle() }) {
+                Text("MAESTRO")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(isMaestroActive ? Color.accentColor : Color.white.opacity(0.08))
+                    .foregroundStyle(isMaestroActive ? .white : .secondary)
+                    .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+
+            // CPU indicator
+            Text("CPU \(cpuPercent)%")
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .frame(width: 50)
+
+            // Reloj
+            Text(currentTime)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .frame(width: 55)
+
+            // Settings icon
+            Button(action: {}) {
+                Image(systemName: "gear")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                PlanBadgeView(plan: authService.plan)
             }
+            .buttonStyle(.plain)
+
+            // Logo PULSO (derecha)
+            Text("PULSO")
+                .font(.system(.caption, design: .rounded).bold())
+                .tracking(2)
+                .foregroundStyle(Color.accentColor)
         }
         .frame(height: 28)
+        .onAppear {
+            startClock()
+        }
+    }
+
+    private func startClock() {
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            DispatchQueue.main.async {
+                let formatter = DateFormatter()
+                formatter.timeZone = TimeZone.current
+                formatter.dateFormat = "HH:mm:ss"
+                currentTime = formatter.string(from: Date())
+            }
+        }
     }
 }
 

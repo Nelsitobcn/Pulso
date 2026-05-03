@@ -24,6 +24,9 @@ struct DeckView: View {
             }
             .frame(height: 80)
 
+            // FX rows estilo VirtualDJ (visual only — preparado para Fase 2)
+            FXRowsView()
+
             HotCuePadsView(deck: deck)
 
             // Plato giratorio (visual)
@@ -375,6 +378,113 @@ struct TempoSliderView: View {
             Text("+15%")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+// MARK: - FX Rows estilo VirtualDJ
+
+/// 3 filas de FX (ECHO / STEMS / BRAKESTART) cada una con dropdown + 3 mini-knobs
+struct FXRowsView: View {
+    @State private var fxEcho1: Double = 0
+    @State private var fxEcho2: Double = 0
+    @State private var fxEcho3: Double = 0
+    @State private var fxStems1: Double = 0
+    @State private var fxStems2: Double = 0
+    @State private var fxStems3: Double = 0
+    @State private var fxBrake1: Double = 0
+    @State private var fxBrake2: Double = 0
+    @State private var fxBrake3: Double = 0
+
+    @State private var selectedFX1 = "ECHO"
+    @State private var selectedFX2 = "STEMS"
+    @State private var selectedFX3 = "BRAKE"
+
+    var body: some View {
+        VStack(spacing: 4) {
+            fxRow(label: selectedFX1, options: ["ECHO", "REVERB", "FILTER", "FLANGER"], onSelect: { selectedFX1 = $0 },
+                  k1: $fxEcho1, k2: $fxEcho2, k3: $fxEcho3, color: .cyan)
+
+            fxRow(label: selectedFX2, options: ["STEMS", "PITCH", "BEAT"], onSelect: { selectedFX2 = $0 },
+                  k1: $fxStems1, k2: $fxStems2, k3: $fxStems3, color: .mint)
+
+            fxRow(label: selectedFX3, options: ["BRAKE", "BRAKESTART", "LOOP", "ROLL"], onSelect: { selectedFX3 = $0 },
+                  k1: $fxBrake1, k2: $fxBrake2, k3: $fxBrake3, color: .purple)
+        }
+    }
+
+    private func fxRow(label: String, options: [String], onSelect: @escaping (String) -> Void,
+                       k1: Binding<Double>, k2: Binding<Double>, k3: Binding<Double>, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Menu {
+                ForEach(options, id: \.self) { opt in
+                    Button(opt) { onSelect(opt) }
+                }
+            } label: {
+                Text(label)
+                    .font(.system(size: 8, weight: .bold))
+                    .lineLimit(1)
+                    .frame(width: 56, height: 22)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(3)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .menuStyle(.borderlessButton)
+
+            MiniKnob(value: k1, color: color)
+            MiniKnob(value: k2, color: color)
+            MiniKnob(value: k3, color: color)
+        }
+    }
+}
+
+/// Mini knob 24x24 para FX (sin label)
+struct MiniKnob: View {
+    @Binding var value: Double  // -1.0 a +1.0
+    let color: Color
+
+    @State private var lastDragY: CGFloat = 0
+    @State private var isDragging = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(Color.gray.opacity(0.3), lineWidth: 2)
+                .frame(width: 24, height: 24)
+
+            Circle()
+                .trim(from: 0.1, to: max(0.105, 0.1 + 0.8 * ((value + 1) / 2)))
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .frame(width: 24, height: 24)
+                .rotationEffect(.degrees(-225))
+
+            Rectangle()
+                .fill(Color.white)
+                .frame(width: 1.5, height: 7)
+                .offset(y: -6)
+                .rotationEffect(.degrees(value * 135))
+        }
+        .frame(width: 24, height: 24)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    if !isDragging {
+                        isDragging = true
+                        lastDragY = drag.location.y
+                        return
+                    }
+                    let delta = Double(lastDragY - drag.location.y) / 60.0
+                    lastDragY = drag.location.y
+                    value = max(-1.0, min(1.0, value + delta))
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    lastDragY = 0
+                }
+        )
+        .onLongPressGesture(minimumDuration: 0.5) {
+            value = 0
         }
     }
 }
