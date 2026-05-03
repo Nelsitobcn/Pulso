@@ -4,56 +4,63 @@ struct TopBarView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var libraryService: LibraryService
 
-    @State private var selectedDesign = "Defecto"
+    @State private var selectedDesign = "INICIAL"
     @State private var selectedDesempen = "Defecto"
     @State private var selectedRack = "Elegir"
+    @State private var selectedElegir = "Elegir"
     @State private var isMaestroActive = false
     @State private var cpuPercent: Int = 3
     @State private var currentTime = "00:00:00"
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Nombre DJ (izquierda)
-            Text(authService.djName)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-
-            // DISEÑO ▾
-            Picker("Diseño", selection: $selectedDesign) {
-                Text("Defecto").tag("Defecto")
+        HStack(spacing: 14) {
+            // Avatar + Nombre DJ
+            HStack(spacing: 6) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                Text(authService.djName.isEmpty ? "DJ" : authService.djName.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
             }
-            .pickerStyle(.menu)
-            .frame(width: 90)
+            .frame(minWidth: 130, alignment: .leading)
 
-            // DESEMPEÑO ▾
-            Picker("Desempeño", selection: $selectedDesempen) {
-                Text("Defecto").tag("Defecto")
-            }
-            .pickerStyle(.menu)
-            .frame(width: 100)
+            // DISEÑO
+            labeledMenu(title: "Diseño", selection: $selectedDesign,
+                        options: ["INICIAL", "ESENCIAL", "PRO", "DESEMPEÑO"])
+
+            // DESEMPEÑO
+            labeledMenu(title: "Desempeño", selection: $selectedDesempen,
+                        options: ["Defecto", "Estudio", "Club", "Festival"])
 
             Spacer()
 
-            // RACK ▾
-            Picker("Rack", selection: $selectedRack) {
-                Text("Elegir").tag("Elegir")
+            // 4 barras MAESTRO indicators (decoración)
+            HStack(spacing: 3) {
+                ForEach(0..<4, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.white.opacity(0.18))
+                        .frame(width: 22, height: 6)
+                }
             }
-            .pickerStyle(.menu)
-            .frame(width: 80)
-
-            // ELEGIR ▾
-            Picker("Elegir", selection: $selectedDesign) {
-                Text("Defecto").tag("Defecto")
-            }
-            .pickerStyle(.menu)
-            .frame(width: 80)
 
             Spacer()
 
-            // Botón MAESTRO
+            // RACK
+            labeledMenu(title: "Rack", selection: $selectedRack,
+                        options: ["Elegir", "Defecto", "FX Pro"])
+
+            // ELEGIR
+            labeledMenu(title: "Elegir", selection: $selectedElegir,
+                        options: ["Elegir", "Defecto", "Custom"])
+
+            Spacer()
+
+            // MAESTRO toggle
             Button(action: { isMaestroActive.toggle() }) {
                 Text("MAESTRO")
-                    .font(.caption.bold())
+                    .font(.system(size: 10, weight: .bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(isMaestroActive ? Color.accentColor : Color.white.opacity(0.08))
@@ -62,35 +69,66 @@ struct TopBarView: View {
             }
             .buttonStyle(.plain)
 
-            // CPU indicator
+            // CPU
             Text("CPU \(cpuPercent)%")
-                .font(.caption.monospaced())
+                .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 50)
+                .frame(width: 56, alignment: .trailing)
 
             // Reloj
             Text(currentTime)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .frame(width: 55)
+                .font(.system(size: 11, design: .monospaced).weight(.medium))
+                .foregroundStyle(.white)
+                .frame(width: 64, alignment: .trailing)
 
-            // Settings icon
+            // Gear
             Button(action: {}) {
                 Image(systemName: "gear")
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
 
-            // Logo PULSO (derecha)
+            // Logo PULSO
             Text("PULSO")
-                .font(.system(.caption, design: .rounded).bold())
-                .tracking(2)
+                .font(.system(size: 12, design: .rounded).bold())
+                .tracking(3)
                 .foregroundStyle(Color.accentColor)
+                .frame(width: 56, alignment: .trailing)
         }
-        .frame(height: 28)
-        .onAppear {
-            startClock()
+        .padding(.horizontal, 8)
+        .frame(height: 32)
+        .onAppear { startClock() }
+    }
+
+    /// Menu con label "Título" + valor seleccionado a la derecha tipo VirtualDJ
+    private func labeledMenu(title: String, selection: Binding<String>, options: [String]) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Menu {
+                ForEach(options, id: \.self) { opt in
+                    Button(opt) { selection.wrappedValue = opt }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(selection.wrappedValue)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.06))
+                .cornerRadius(4)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
     }
 
