@@ -58,3 +58,6 @@ logs/
 
 # Node (si hay scripts de utilidad)
 node_modules/
+
+# Claude Code (sesión local, no versionar)
+.claude/

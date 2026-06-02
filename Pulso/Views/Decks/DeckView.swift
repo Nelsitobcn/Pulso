@@ -67,9 +67,15 @@ struct DeckView: View {
             _ = provider.loadObject(ofClass: NSURL.self) { nsurl, _ in
                 guard let url = nsurl as? URL else { return }
                 Task { @MainActor in
-                    let imported = await libraryService.importTracks(urls: [url])
-                    if let track = imported.first {
-                        audioEngine.load(track: track, into: deck.id)
+                    // Buscar primero si la pista YA está en la biblioteca
+                    if let existingTrack = libraryService.tracks.first(where: { $0.url == url }) {
+                        audioEngine.load(track: existingTrack, into: deck.id)
+                    } else {
+                        // Si no existe (ej. arrastrada desde Finder), importar
+                        let imported = await libraryService.importTracks(urls: [url])
+                        if let track = imported.first {
+                            audioEngine.load(track: track, into: deck.id)
+                        }
                     }
                 }
             }
@@ -80,9 +86,14 @@ struct DeckView: View {
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
             Task { @MainActor in
-                let imported = await libraryService.importTracks(urls: [url])
-                if let track = imported.first {
-                    audioEngine.load(track: track, into: deck.id)
+                // Búsqueda similar para Data URLs
+                if let existingTrack = libraryService.tracks.first(where: { $0.url == url }) {
+                    audioEngine.load(track: existingTrack, into: deck.id)
+                } else {
+                    let imported = await libraryService.importTracks(urls: [url])
+                    if let track = imported.first {
+                        audioEngine.load(track: track, into: deck.id)
+                    }
                 }
             }
         }
@@ -213,23 +224,6 @@ struct TransportControlsView: View {
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
-
-            // TEST TEMPO — pulsa para oír si AVAudioUnitTimePitch funciona
-            Button {
-                Task {
-                    audioEngine.testSetRate(1.5, deck: deck.id)
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    audioEngine.testSetRate(1.0, deck: deck.id)
-                }
-            } label: {
-                Text("T")
-                    .font(.caption.bold())
-                    .frame(width: 28, height: 36)
-                    .background(Color.red.opacity(0.7))
-                    .cornerRadius(8)
-            }
-            .buttonStyle(.plain)
-            .help("TEST: acelera 2s y vuelve — confirma si TimePitch funciona")
         }
         .foregroundStyle(.white)
     }

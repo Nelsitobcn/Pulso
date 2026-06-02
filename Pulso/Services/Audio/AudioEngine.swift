@@ -328,12 +328,6 @@ final class AudioEngine: ObservableObject {
         saveSession()
     }
 
-    /// TEST DIRECTO: cambia rate del nodo sin pasar por observers
-    func testSetRate(_ rate: Float, deck: DeckID) {
-        let pitch = deck == .left ? pitchA : pitchB
-        pitch.rate = rate
-    }
-
     /// Aplica tempo directo al nodo AVAudioUnitTimePitch (llamado desde slider)
     func applyTempo(_ newRate: Double, deck: DeckID) {
         let pitch     = deck == .left ? pitchA : pitchB
@@ -361,18 +355,80 @@ final class AudioEngine: ObservableObject {
         let masterDeck = slave == .left ? deckB : deckA
         let slaveDeck  = slave == .left ? deckA : deckB
         let slavePitch = slave == .left ? pitchA : pitchB
+        let slavePlayer = slave == .left ? playerA : playerB
+
         guard let masterBPM = masterDeck.track?.bpm,
               let slaveBPM  = slaveDeck.track?.bpm,
               slaveBPM > 0 else { return }
 
         let newRate = masterBPM / slaveBPM
 
-        // Aplicar directamente al nodo de audio (igual que testSetRate)
+        // Aplicar tempo al nodo de audio del slave
         slavePitch.rate  = Float(newRate)
         slavePitch.pitch = slaveDeck.keyLock ? 0 : Float(-1200.0 * log2(newRate))
 
-        // Actualizar estado para que el timer y UI sean consistentes
-        if slaveDeck.isPlaying {
+        // ¿Se reposicionó el slave en fase? Si sí, su base de tiempo ya quedó registrada
+        // dentro del bloque y NO debemos volver a tocarla con el bloque genérico de abajo.
+        var rephased = false
+
+        // Si AMBOS están reproduciendo, sincronizar también la FASE (posición)
+        if slaveDeck.isPlaying && masterDeck.isPlaying {
+            // Calcular el período de beat en segundos para cada deck
+            // beatDur = 60 / (BPM * rate_efectivo)
+            // donde rate_efectivo es el tempo del pitch node (ya hemos aplicado newRate al slave)
+            let beatDurMaster = 60.0 / (masterBPM * masterDeck.tempo)
+            let beatDurSlave = 60.0 / (slaveBPM * newRate)
+
+            // Obtener tiempo de audio actual (desde CACurrentMediaTime)
+            let masterTime = currentAudioTime(deck: slave == .left ? .right : .left)
+            let slaveTime = currentAudioTime(deck: slave)
+
+            // Calcular fase: tiempo modulo período
+            let phaseMaster = masterTime.truncatingRemainder(dividingBy: beatDurMaster)
+
+            // Encontrar la posición en el slave más cercana que ponga su fase igual a la del master
+            let slavePhaseCycles = slaveTime / beatDurSlave
+            let targetSlaveTime = (slavePhaseCycles.rounded(.down) * beatDurSlave) + phaseMaster
+
+            // Si la diferencia de fase es muy pequeña, no hacer nada para evitar saltos audibles
+            let phaseDiff = abs(targetSlaveTime - slaveTime)
+            if phaseDiff > 0.020 {  // Más de 20ms de desfase
+                // Repositicionar el slave a la fase correcta
+                // Usar AVAudioTime con hostTime futuro (en ~50ms) para que ambos arranquen coordinados
+                let futureHostTime = mach_absolute_time() + UInt64(50_000_000)  // ~50ms en mach units
+                let avTime = AVAudioTime(hostTime: futureHostTime)
+
+                let file = slave == .left ? fileA : fileB
+                guard let file else { return }
+
+                let sr = file.processingFormat.sampleRate
+                let targetFrame = AVAudioFramePosition(targetSlaveTime * sr)
+
+                slavePlayer.stop()
+                scheduleSegment(file: file, from: targetFrame, deck: slave, at: avTime)
+                slavePlayer.play()
+
+                // El audio arranca en futureHostTime desde targetSlaveTime. La base de tiempo
+                // debe reflejar ESO (no el tiempo viejo arrancando ahora), o el playhead/timer
+                // se descuadran respecto al audio real. Convertimos el hostTime mach a la
+                // referencia de CACurrentMediaTime que usa currentAudioTime().
+                let startCAMediaTime = AVAudioTime.seconds(forHostTime: futureHostTime)
+                if slave == .left {
+                    pausedAtA     = targetSlaveTime
+                    playHostTimeA = startCAMediaTime
+                    playTempoA    = newRate
+                } else {
+                    pausedAtB     = targetSlaveTime
+                    playHostTimeB = startCAMediaTime
+                    playTempoB    = newRate
+                }
+                rephased = true
+            }
+        }
+
+        // Si NO hubo reposicionado en fase, actualizar la base de tiempo del modo normal
+        // (solo cambió el tempo) para que timer y UI sean consistentes.
+        if slaveDeck.isPlaying && !rephased {
             let currentT = currentAudioTime(deck: slave)
             if slave == .left {
                 pausedAtA     = currentT
@@ -470,13 +526,14 @@ final class AudioEngine: ObservableObject {
         scheduleSegment(file: file, from: 0, deck: deck)
     }
 
-    private func scheduleSegment(file: AVAudioFile, from frame: AVAudioFramePosition, deck: DeckID) {
+    private func scheduleSegment(file: AVAudioFile, from frame: AVAudioFramePosition, deck: DeckID, at avTime: AVAudioTime? = nil) {
         let player = deck == .left ? playerA : playerB
         let d      = deck == .left ? deckA   : deckB
         guard frame < file.length else { return }
 
         let count = AVAudioFrameCount(file.length - frame)
-        player.scheduleSegment(file, startingFrame: frame, frameCount: count, at: nil,
+        // Usar AVAudioTime proporcionado (para sincronización en fase) o nil (inicio inmediato)
+        player.scheduleSegment(file, startingFrame: frame, frameCount: count, at: avTime,
                                completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, !d.isLooping else { return }
