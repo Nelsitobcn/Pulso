@@ -40,7 +40,7 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Estado publicado
     @Published var crossfader: Double = 0.5
-    @Published var masterVolume: Double = 0.8
+    @Published var masterVolume: Double = 1.0
     @Published var vuLevelA: Float = 0
     @Published var vuLevelB: Float = 0
 
@@ -75,6 +75,13 @@ final class AudioEngine: ObservableObject {
     private var playTempoA: Double = 1.0
     private var playTempoB: Double = 1.0
 
+    // Token de generación de segmento por deck. Cada scheduleSegment lo incrementa; el
+    // completion callback solo actúa si su token sigue vigente. Evita que un stop() hecho
+    // para REPROGRAMAR (load/seek/sync) dispare el callback del segmento viejo y resetee
+    // playHostTime/isPlaying del segmento nuevo (bug: currentAudioTime se quedaba en 0).
+    private var segmentTokenA: Int = 0
+    private var segmentTokenB: Int = 0
+
     private var cancellables = Set<AnyCancellable>()
     private var timerA: AnyCancellable?
     private var timerB: AnyCancellable?
@@ -93,6 +100,7 @@ final class AudioEngine: ObservableObject {
         print("[AudioEngine] ✅ Engine iniciado")
         setupObservers()
     }
+
 
     // MARK: - Grafo
 
@@ -262,6 +270,10 @@ final class AudioEngine: ObservableObject {
             } else {
                 pausedAtB = currentAudioTime(deck: deck)
             }
+            // Si este deck participa en el phase-lock, soltarlo.
+            if phaseLockSlave == deck || (phaseLockSlave != nil && phaseLockSlave != deck) {
+                stopPhaseLock()
+            }
             player.stop()
             stopTimer(deck: deck)
             deckState.isPlaying = false
@@ -355,7 +367,6 @@ final class AudioEngine: ObservableObject {
         let masterDeck = slave == .left ? deckB : deckA
         let slaveDeck  = slave == .left ? deckA : deckB
         let slavePitch = slave == .left ? pitchA : pitchB
-        let slavePlayer = slave == .left ? playerA : playerB
 
         guard let masterBPM = masterDeck.track?.bpm,
               let slaveBPM  = slaveDeck.track?.bpm,
@@ -367,81 +378,102 @@ final class AudioEngine: ObservableObject {
         slavePitch.rate  = Float(newRate)
         slavePitch.pitch = slaveDeck.keyLock ? 0 : Float(-1200.0 * log2(newRate))
 
-        // ¿Se reposicionó el slave en fase? Si sí, su base de tiempo ya quedó registrada
-        // dentro del bloque y NO debemos volver a tocarla con el bloque genérico de abajo.
-        var rephased = false
-
-        // Si AMBOS están reproduciendo, sincronizar también la FASE (posición)
-        if slaveDeck.isPlaying && masterDeck.isPlaying {
-            // Calcular el período de beat en segundos para cada deck
-            // beatDur = 60 / (BPM * rate_efectivo)
-            // donde rate_efectivo es el tempo del pitch node (ya hemos aplicado newRate al slave)
-            let beatDurMaster = 60.0 / (masterBPM * masterDeck.tempo)
-            let beatDurSlave = 60.0 / (slaveBPM * newRate)
-
-            // Obtener tiempo de audio actual (desde CACurrentMediaTime)
-            let masterTime = currentAudioTime(deck: slave == .left ? .right : .left)
-            let slaveTime = currentAudioTime(deck: slave)
-
-            // Calcular fase: tiempo modulo período
-            let phaseMaster = masterTime.truncatingRemainder(dividingBy: beatDurMaster)
-
-            // Encontrar la posición en el slave más cercana que ponga su fase igual a la del master
-            let slavePhaseCycles = slaveTime / beatDurSlave
-            let targetSlaveTime = (slavePhaseCycles.rounded(.down) * beatDurSlave) + phaseMaster
-
-            // Si la diferencia de fase es muy pequeña, no hacer nada para evitar saltos audibles
-            let phaseDiff = abs(targetSlaveTime - slaveTime)
-            if phaseDiff > 0.020 {  // Más de 20ms de desfase
-                // Repositicionar el slave a la fase correcta
-                // Usar AVAudioTime con hostTime futuro (en ~50ms) para que ambos arranquen coordinados
-                let futureHostTime = mach_absolute_time() + UInt64(50_000_000)  // ~50ms en mach units
-                let avTime = AVAudioTime(hostTime: futureHostTime)
-
-                let file = slave == .left ? fileA : fileB
-                guard let file else { return }
-
-                let sr = file.processingFormat.sampleRate
-                let targetFrame = AVAudioFramePosition(targetSlaveTime * sr)
-
-                slavePlayer.stop()
-                scheduleSegment(file: file, from: targetFrame, deck: slave, at: avTime)
-                slavePlayer.play()
-
-                // El audio arranca en futureHostTime desde targetSlaveTime. La base de tiempo
-                // debe reflejar ESO (no el tiempo viejo arrancando ahora), o el playhead/timer
-                // se descuadran respecto al audio real. Convertimos el hostTime mach a la
-                // referencia de CACurrentMediaTime que usa currentAudioTime().
-                let startCAMediaTime = AVAudioTime.seconds(forHostTime: futureHostTime)
-                if slave == .left {
-                    pausedAtA     = targetSlaveTime
-                    playHostTimeA = startCAMediaTime
-                    playTempoA    = newRate
-                } else {
-                    pausedAtB     = targetSlaveTime
-                    playHostTimeB = startCAMediaTime
-                    playTempoB    = newRate
-                }
-                rephased = true
-            }
-        }
-
-        // Si NO hubo reposicionado en fase, actualizar la base de tiempo del modo normal
-        // (solo cambió el tempo) para que timer y UI sean consistentes.
-        if slaveDeck.isPlaying && !rephased {
+        // Actualizar base de tiempo del slave (el tempo cambió).
+        if slaveDeck.isPlaying {
             let currentT = currentAudioTime(deck: slave)
             if slave == .left {
-                pausedAtA     = currentT
-                playHostTimeA = CACurrentMediaTime()
-                playTempoA    = newRate
+                pausedAtA = currentT; playHostTimeA = CACurrentMediaTime(); playTempoA = newRate
             } else {
-                pausedAtB     = currentT
-                playHostTimeB = CACurrentMediaTime()
-                playTempoB    = newRate
+                pausedAtB = currentT; playHostTimeB = CACurrentMediaTime(); playTempoB = newRate
             }
         }
         slaveDeck.tempo = newRate  // actualiza UI (bpmDisplay)
         saveSession()
+
+        // Si ambos suenan, activar el PHASE-LOCK continuo. La investigación (NotebookLM
+        // "Software DJ con IA 2026") confirma que un "align once" SIEMPRE deriva por
+        // imprecisiones de punto flotante y por la latencia FFT de AVAudioUnitTimePitch.
+        // Los DJ software pro usan un bucle que mide el error de fase contra un beatgrid y
+        // hace NUDGE del rate (±pequeño) hasta corregir, sin saltos audibles.
+        if slaveDeck.isPlaying && masterDeck.isPlaying {
+            // NO se reposiciona el deck (eso lo hacía saltar al principio). El SYNC respeta
+            // la posición actual del slave en la canción y SOLO ajusta el tempo de forma
+            // continua (phase-lock por nudge) para enganchar y mantener la fase del beat.
+            startPhaseLock(slave: slave, baseRate: newRate)
+        }
+    }
+
+    // MARK: - Phase-lock continuo (beatmatching real)
+
+    /// Posición REAL de salida del player (frames de audio que ya han pasado por el nodo),
+    /// no el tiempo de archivo. Es la única fuente fiable para medir fase.
+    private func playerOutputTime(_ player: AVAudioPlayerNode) -> Double? {
+        guard let nodeTime = player.lastRenderTime,
+              let pt = player.playerTime(forNodeTime: nodeTime) else { return nil }
+        return Double(pt.sampleTime) / pt.sampleRate
+    }
+
+    private var phaseLockTimer: AnyCancellable?
+    private var phaseLockSlave: DeckID?
+
+    /// Arranca un bucle que cada 100ms mide el desfase de beat entre master y slave y empuja
+    /// suavemente el rate del slave (nudge ±) hasta que los bombos coinciden. Es un controlador
+    /// proporcional simple. Se detiene si algún deck para o se vuelve a sincronizar.
+    private func startPhaseLock(slave: DeckID, baseRate: Double) {
+        stopPhaseLock()
+        phaseLockSlave = slave
+        let master: DeckID = slave == .left ? .right : .left
+        let slavePitch = slave == .left ? pitchA : pitchB
+        let slavePlayer = slave == .left ? playerA : playerB
+        let masterPlayer = master == .left ? playerA : playerB
+
+        guard let masterBPM = (master == .left ? deckA : deckB).track?.bpm,
+              let slaveBPM  = (slave  == .left ? deckA : deckB).track?.bpm,
+              masterBPM > 0, slaveBPM > 0 else { return }
+        let masterTempo = (master == .left ? deckA : deckB).tempo
+        // beat efectivo del master, en su tiempo de archivo (lo que reporta playerOutputTime).
+        let beatMasterFile = 60.0 / (masterBPM * masterTempo)
+        // beat del slave en SU tiempo de archivo (sin rate; el rate lo aplica el nodo).
+        let beatSlaveFile = 60.0 / slaveBPM
+
+        phaseLockTimer = Timer.publish(every: 0.1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let s = slave == .left ? self.deckA : self.deckB
+                let m = master == .left ? self.deckA : self.deckB
+                guard s.isPlaying, m.isPlaying else { self.stopPhaseLock(); return }
+                guard let mTime = self.playerOutputTime(masterPlayer),
+                      let sTime = self.playerOutputTime(slavePlayer) else { return }
+
+                // Fase de cada uno dentro de su beat, normalizada a [0,1).
+                let phaseM = (mTime.truncatingRemainder(dividingBy: beatMasterFile)) / beatMasterFile
+                let phaseS = (sTime.truncatingRemainder(dividingBy: beatSlaveFile)) / beatSlaveFile
+                var err = phaseM - phaseS                 // error de fase en fracción de beat
+                if err > 0.5 { err -= 1 }                 // distancia circular más corta
+                if err < -0.5 { err += 1 }
+
+                // Nudge adaptativo: como NO hacemos seek (para no saltar de posición), el
+                // phase-lock engancha todo el desfase por sí solo. El cap ±8% saturaba y tardaba
+                // ~10s en converger; con cap ±25% corrige el grueso en 1-2s. Cuando el error es
+                // pequeño, err*2.0 ya da valores pequeños → suaviza solo (sin oscilar).
+                // Si el slave va atrasado (err>0) acelera; si adelantado, frena.
+                let nudge = max(-0.25, min(0.25, err * 2.0))
+                let newRate = baseRate * (1.0 + nudge)
+                slavePitch.rate = Float(max(0.01, newRate))
+            }
+    }
+
+    private func stopPhaseLock() {
+        phaseLockTimer?.cancel()
+        phaseLockTimer = nil
+        // Restaurar el rate base exacto del slave al soltar el lock.
+        if let s = phaseLockSlave {
+            let pitch = s == .left ? pitchA : pitchB
+            let deckState = s == .left ? deckA : deckB
+            pitch.rate = Float(max(0.01, deckState.tempo))
+        }
+        phaseLockSlave = nil
     }
 
     /// Comportamiento CDJ: si reproduciendo → marca cue; si pausado → salta al cue marcado
@@ -532,11 +564,20 @@ final class AudioEngine: ObservableObject {
         guard frame < file.length else { return }
 
         let count = AVAudioFrameCount(file.length - frame)
+        // Incrementar el token: este es ahora el segmento vigente para este deck.
+        let myToken: Int
+        if deck == .left { segmentTokenA += 1; myToken = segmentTokenA }
+        else             { segmentTokenB += 1; myToken = segmentTokenB }
+
         // Usar AVAudioTime proporcionado (para sincronización en fase) o nil (inicio inmediato)
         player.scheduleSegment(file, startingFrame: frame, frameCount: count, at: avTime,
                                completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, !d.isLooping else { return }
+                // Solo actuar si este sigue siendo el segmento vigente. Si otro stop()/schedule
+                // lo reemplazó (load/seek/sync), el token cambió y este callback es obsoleto.
+                let currentToken = deck == .left ? self.segmentTokenA : self.segmentTokenB
+                guard myToken == currentToken else { return }
                 d.isPlaying = false
                 self.stopTimer(deck: deck)
                 if deck == .left { self.pausedAtA = 0; self.playHostTimeA = 0 }

@@ -220,7 +220,11 @@ struct LibraryTrackRow: View {
             }
         }
         .onDrag {
-            NSItemProvider(object: track.url as NSURL)
+            // Transferir el UUID del track como texto plano (UTI public.plain-text,
+            // reconocido de forma universal y fiable). El deck lo recibe y busca la
+            // pista por id. Mucho más robusto que NSItemProvider(object: NSURL),
+            // que en macOS/SwiftUI resuelve de forma asíncrona y a menudo falla.
+            NSItemProvider(object: track.id.uuidString as NSString)
         }
     }
 

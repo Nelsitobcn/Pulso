@@ -54,24 +54,39 @@ struct DeckView: View {
                         )
                 )
         )
-        // Drag & drop desde Finder o biblioteca
-        .onDrop(of: [.audio, .fileURL], isTargeted: $isDragTarget) { providers in
+        // Drag & drop: desde biblioteca (UUID como texto) o desde Finder (fileURL/audio)
+        .onDrop(of: [.text, .audio, .fileURL], isTargeted: $isDragTarget) { providers in
             handleDrop(providers: providers)
         }
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
-        // Intentar primero como NSURL (viene de onDrag con NSItemProvider(object: NSURL))
+        logger.info("[DROP] deck=\(self.deck.id.rawValue) tipos=\(provider.registeredTypeIdentifiers)")
+
+        // Caso 1: desde la biblioteca — llega el UUID del track como texto plano
+        if provider.canLoadObject(ofClass: NSString.self) {
+            _ = provider.loadObject(ofClass: NSString.self) { str, _ in
+                guard let idString = str as? String,
+                      let uuid = UUID(uuidString: idString) else { return }
+                Task { @MainActor in
+                    if let track = libraryService.tracks.first(where: { $0.id == uuid }) {
+                        logger.info("[DROP] cargando por id: \(track.title)")
+                        audioEngine.load(track: track, into: deck.id)
+                    }
+                }
+            }
+            return true
+        }
+
+        // Caso 2: desde Finder — llega un NSURL
         if provider.canLoadObject(ofClass: NSURL.self) {
             _ = provider.loadObject(ofClass: NSURL.self) { nsurl, _ in
                 guard let url = nsurl as? URL else { return }
                 Task { @MainActor in
-                    // Buscar primero si la pista YA está en la biblioteca
                     if let existingTrack = libraryService.tracks.first(where: { $0.url == url }) {
                         audioEngine.load(track: existingTrack, into: deck.id)
                     } else {
-                        // Si no existe (ej. arrastrada desde Finder), importar
                         let imported = await libraryService.importTracks(urls: [url])
                         if let track = imported.first {
                             audioEngine.load(track: track, into: deck.id)

@@ -67,8 +67,25 @@ actor TrackAnalyzer {
             }
         }
 
-        let bpm = 60.0 / (Double(bestLag) * hopDuration)
-        return (bpm * 2).rounded() / 2
+        // Interpolación parabólica alrededor del pico para precisión sub-muestra.
+        // El lag entero solo da resolución ~±1.5 BPM a tempos altos; con los 3 puntos
+        // alrededor del máximo refinamos el lag real (decimal), eliminando el error que
+        // hacía que 128 BPM se detectara como 127.5 y causaba drift en el SYNC.
+        var refinedLag = Double(bestLag)
+        if bestLag > minLag && bestLag < min(maxLag, acSize - 1) {
+            let y0 = Double(autocorr[bestLag - 1])
+            let y1 = Double(autocorr[bestLag])
+            let y2 = Double(autocorr[bestLag + 1])
+            let denom = y0 - 2 * y1 + y2
+            if abs(denom) > 1e-9 {
+                let offset = 0.5 * (y0 - y2) / denom   // en [-0.5, 0.5]
+                if offset.isFinite && abs(offset) <= 1 { refinedLag += offset }
+            }
+        }
+
+        let bpm = 60.0 / (refinedLag * hopDuration)
+        // Sin redondeo a 0.5: devolvemos 1 decimal de precisión real.
+        return (bpm * 10).rounded() / 10
     }
 
     // MARK: - Key Detection (Krumhansl-Schmuckler)
