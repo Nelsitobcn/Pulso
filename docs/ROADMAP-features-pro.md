@@ -349,5 +349,99 @@ func suggestNextTracksWithAI(prompt: String, basedOn track: Track) async -> [Tra
 
 ---
 
-**Última revisión:** 2-jun-2026  
+# ANEXO — Auditoría 23-jun-2026 (Fugu: Gemini propone + DeepSeek audita)
+
+> **Método:** auditoría vía `/fugu` (worker Gemini 2.5 Pro, verificador adversarial DeepSeek V4).
+> El Verifier marcó ambas tandas **NO_SEGURO** y encontró fallos físicos/técnicos reales en
+> las propuestas crudas. **Lo de abajo ya está corregido con los hallazgos del Verifier** —
+> no copiar la propuesta cruda de Gemini sin estas correcciones.
+> **Marco:** Pulso es herramienta PARTICULAR de Nelson+Mauri, NO comercial → sin atadura de
+> licencias de API comerciales (las restricciones de Spotify DJ-terms etc. no aplican a uso privado).
+
+## A1 — SYNC / Beatmatching: por qué sigue cojo (diagnóstico confirmado en código)
+
+### Bug raíz (confirmado leyendo el código)
+**Guerra de escritura sobre `pitch.rate`.** Dos controladores escriben el MISMO parámetro sin árbitro:
+- `DeckView.swift:381` — slider tempo → `applyTempo()` → `pitch.rate` (`AudioEngine.swift:349`)
+- `AudioEngine.swift:463` — `phaseLockTimer` cada 100ms → `slavePitch.rate`
+
+Al mover el slider del slave con SYNC activo, el timer lo pisa 10×/seg → "lo hace muy mal" (Nelson).
+
+### 3 fallos más hallados en el código (no documentados antes)
+1. **El `TrackAnalyzer` NUNCA calcula beatgrid ni downbeat.** Devuelve solo `track.bpm` (un número). El SYNC alinea contra `t=0` porque no tiene otra cosa. `Track`/`DeckState` no tienen campo `beatGrid`/`firstBeat`. → causa raíz del "downbeat no real".
+2. **`beatMasterFile` se congela al arrancar el lock** (`AudioEngine.swift:435`) — si el master cambia tempo, el slave persigue una fase fantasma.
+3. **El analyzer solo mira los primeros 60s** (`TrackAnalyzer.swift:238`) → BPM de intro ≠ BPM del drop.
+
+### Arquitectura correcta (corregida por el Verifier)
+**Desacoplar TEMPO de FASE:**
+- `AVAudioUnitTimePitch` (o Rubber Band) = SOLO tempo base. Slider + BPM-objetivo escriben aquí.
+- Phase-nudge = **ring buffer con lectura fraccional** (NO `AVAudioUnitVarispeed` — Gemini lo propuso pero el Verifier lo desmintió: Varispeed cambia pitch Y tempo a la vez → el pitch oscilaría audible en cada micro-corrección).
+- Idealmente el lazo de control en **render thread** (sample-accurate), no en `Timer`/main thread (5-10ms de jitter — fallo no señalado por Gemini).
+- `TrackAnalyzer` debe generar **beatgrid + downbeat real** y guardarlo en `Track`. Sin esto, el auto-mix por frases es imposible.
+
+### Fix barato e inmediato (Swift puro, SIN C++)
+**Árbitro de escritura:** al tocar el slider con SYNC activo → o se desactiva SYNC, o el slider mueve la `baseRate` del lock en vez de pisar `pitch.rate` directo. Mata el bug que más molesta HOY. 1 sesión.
+
+### Rubber Band (decisión con Mauri)
+`AVAudioUnitTimePitch` (phase vocoder vDSP) "mancha" transientes y no expone control fase/tempo separado. **Rubber Band Library** (LGPL, open-source) sí lo expone (`setTimeRatio` vs `setPitchScale`). Pero integrarla = wrapper Obj-C++ (`.mm`) + AudioUnit v3 custom + thread-safety por buffer (la API de RB es de bloque/offline → riesgo técnico real que Gemini subestimó). Es ingeniería seria. Decisión arquitectónica Nelson+Mauri.
+
+---
+
+## A2 — Soberanía de fuentes musicales (uso particular)
+
+### Estado de herramientas en el Mac (verificado 23-jun-2026)
+- ✅ `yt-dlp` 2026.03.17 · ✅ `ffmpeg` 8.1.1 · ✅ Ollama local (qwen3-coder gratis)
+- ❌ **BlackHole NO instalado** → loopback de navegador requiere `brew install blackhole-2ch`
+- ✅ `Track` ya tiene `url/bpm/key/energy/genre` + `isCompatible()` Camelot → sugerencia armónica con 50% hecho
+
+### 🥇 FASE 2 — núcleo soberano
+
+**F2.1 — YouTube como fuente de deck** (★ feature soberana)
+- yt-dlp baja el audio → `TrackAnalyzer` calcula BPM/key/beatgrid → queda local para siempre. Convierte todo YouTube en biblioteca propia.
+- 🔴 **Corrección Verifier (crítica):** NO usar URL de streaming directa (`yt-dlp --get-url`) — **expira en ~6h y muere en runtime sin avisar**. Para herramienta propia: **descargar el archivo completo primero**, luego cargar local. Sin streaming frágil.
+- 🔴 **Inyección de comandos:** títulos de playlist van como args a yt-dlp. Un título con `"; rm -rf /` se ejecutaría. **OBLIGATORIO** pasar args como array (`Process.arguments`), NUNCA string interpolado.
+- 🔴 Caché necesita límite de tamaño + evicción LRU, o llena el disco (`PULSO_CACHE` crece infinito).
+
+**F2.2 — Importador universal de playlists** (Spotify/Apple/YouTube/SoundCloud/.m3u/.xspf → crate)
+- Parsea título-artista → "Resolvedor": busca primero en biblioteca local (fuzzy), si no, lo baja de YouTube. Estado por track: local / youtube / no-encontrado.
+- ⚠️ **Verifier:** scraping HTML (SwiftSoup) de Spotify/Apple es **frágil** (cambio de DOM → crate vacía sin explicación). Lo estable: `.m3u/.xspf` (texto plano) + API YouTube (key personal gratis). Spotify/Apple = "best effort", asumir mantenimiento.
+
+### 🥈 FASE 3 — descubrimiento e inteligencia
+
+**F3.1 — Crates de tendencia + "Mauri-Bot" (Ollama local)**
+- Scrape Beatport/Traxsource/1001Tracklists Top 100 (SwiftSoup, 1×/día) → crates virtuales. Click en track → activa el Resolvedor de F2.
+- Ollama local filtra "qué de este Top es imprescindible PARA TI" según tu biblioteca + sets de Mauri.
+- 🔴 Verifier: Ollama puede alucinar JSON → validar schema + retry. Caso borde fácil de cubrir.
+
+**F3.2 — Navegador como deck (BlackHole loopback)**
+- Captura audio del sistema (Brave/Mixcloud/SoundCloud en vivo) → deck de Pulso con EQ/filtros tiempo real.
+- 🔴 **Verifier crítico:** el código de Gemini **NO compila en macOS** (usó `AVAudioSession`, que es API de iOS). En macOS: CoreAudio + `AudioObjectGetPropertyData`. El "Aggregate/Multi-Output Device" afecta a TODO el audio del sistema (subir volumen cambia la señal de entrada) — acoplamiento que hay que manejar. Factible pero más trabajo del que pintó Gemini. Requiere instalar BlackHole.
+
+### 🌙 MOONSHOT
+
+**M.1 — ShazamKit "taggear y robar"**
+- Escuchas un DJ set online → botón Taggear → ShazamKit lo identifica → se baja de YouTube y entra analizado a la biblioteca en ~15s.
+- 🔴 Verifier: ShazamKit en macOS desde BlackHole **no está documentado como soportado** — puede fallar en runtime sin error de compilación. Probar antes de asumir.
+
+### Orden recomendado (más capacidad / menos riesgo)
+0. **Árbitro de escritura SYNC** (A1) — prerequisito: sin SYNC fino las fuentes nuevas no se mezclan bien.
+1. **YouTube→deck con descarga+caché** (F2.1, NO streaming).
+2. **Sugerencia armónica local** (Camelot+BPM+energía — 50% hecho en `Track.isCompatible()`).
+3. **Mauri-Bot Ollama** (F3.1) — gratis, local, único.
+4. Loopback navegador (F3.2) + Shazam (M.1) cuando la base sea roca.
+
+### Resumen fallos que el Verifier salvó (no repetir)
+| Propuesta cruda Gemini | Fallo (DeepSeek) | Corrección |
+|---|---|---|
+| Varispeed para phase-nudge | Cambia pitch+tempo → oscila audible | Ring buffer fraccional |
+| URL streaming yt-dlp | Expira ~6h, muere en runtime | Descargar archivo completo |
+| Título → string a yt-dlp | Inyección de comandos | Args como array |
+| `AVAudioSession` (loopback) | Es API iOS, no compila macOS | CoreAudio nativo |
+| Caché sin límite | Llena disco | Evicción LRU |
+| Ollama → JSON directo | Alucina → crash | Validar schema + retry |
+| ShazamKit desde BlackHole | No documentado soportado | Probar antes |
+
+---
+
+**Última revisión:** 23-jun-2026 (anexo auditoría Fugu)  
 **Próxima revisión:** 15-ago-2026 (post-Ola 1 MVP)
