@@ -84,8 +84,22 @@ actor TrackAnalyzer {
         }
 
         let bpm = 60.0 / (refinedLag * hopDuration)
-        // Sin redondeo a 0.5: devolvemos 1 decimal de precisión real.
-        return (bpm * 10).rounded() / 10
+        // Plegar a la octava de tempo canónica de DJ [90, 180). La autocorrelación se engancha
+        // con frecuencia al medio-beat o doble-beat (error x2 / ÷2 clásico): "Lloraras" salía
+        // 181 en vez de ~90. Casi toda la música mezclable vive en [90,180); fuera de ahí se
+        // dobla o se halva hasta caer dentro. Esto da un BPM estable para el SYNC.
+        let folded = Self.foldToDJRange(bpm)
+        return (folded * 10).rounded() / 10
+    }
+
+    /// Lleva un BPM a la octava [90, 180) doblando/halvando. Mantiene la clase de tempo
+    /// correcta y elimina los errores x2/÷2 de la autocorrelación.
+    private static func foldToDJRange(_ bpm: Double) -> Double {
+        guard bpm > 0 else { return 120 }
+        var b = bpm
+        while b >= 180 { b /= 2 }
+        while b < 90 { b *= 2 }
+        return b
     }
 
     // MARK: - Key Detection (Krumhansl-Schmuckler)

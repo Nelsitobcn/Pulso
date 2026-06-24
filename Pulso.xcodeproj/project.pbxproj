@@ -27,12 +27,14 @@
 		796864AE8CDAA7F220DEF0BD /* EQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A948DE4CE18404260A9E357 /* EQView.swift */; };
 		7BD8319F2F800D4BA5C9B253 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA79F8FEB8B728D87F5720E /* LibraryView.swift */; };
 		7C38B9502981AF118311588A /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */; };
+		8125F24839D243096B727050 /* DJAssistantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */; };
 		82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
 		8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
 		9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
 		A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B91547CC68CB6AB7492D15 /* TopBarView.swift */; };
 		A1907425604B3FE06C79961A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
 		A8F32EA969558D4A555AA032 /* TurntableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA72FF8502521A96F5EA0F35 /* TurntableView.swift */; };
+		AB13A10C5A332A0D5E920CD4 /* DJAssistantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */; };
 		AB73C26E970E992033474A82 /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
 		B61692FAB12227CC8699FF97 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B91547CC68CB6AB7492D15 /* TopBarView.swift */; };
 		B90EDD594F6A59015758CB63 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
@@ -64,6 +66,7 @@
 		8236C939D512E4F41F901C83 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		9A948DE4CE18404260A9E357 /* EQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQView.swift; sourceTree = "<group>"; };
 		B4B224FA76EEF28A68714440 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJAssistantService.swift; sourceTree = "<group>"; };
 		BA72FF8502521A96F5EA0F35 /* TurntableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurntableView.swift; sourceTree = "<group>"; };
 		CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeService.swift; sourceTree = "<group>"; };
 		D2257B39832162A06644607F /* MainDJView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDJView.swift; sourceTree = "<group>"; };
@@ -135,6 +138,7 @@
 		95FBC66DDAA91DA63BD4C88C /* Library */ = {
 			isa = PBXGroup;
 			children = (
+				B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */,
 				5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */,
 				CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */,
 			);
@@ -313,6 +317,7 @@
 				26821B50E7919303759F9083 /* AuthService.swift in Sources */,
 				C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */,
 				64B61280810F807CED4B0931 /* ContentView.swift in Sources */,
+				AB13A10C5A332A0D5E920CD4 /* DJAssistantService.swift in Sources */,
 				6AABF702C0DFE01D53AB8123 /* DeckState.swift in Sources */,
 				40708D1D4CBBA523EFAC1459 /* DeckView.swift in Sources */,
 				796864AE8CDAA7F220DEF0BD /* EQView.swift in Sources */,
@@ -339,6 +344,7 @@
 				FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */,
 				53AE6F640F0BCB770FC1BF37 /* CenterControlsView.swift in Sources */,
 				0F1F35AE043D3CF6F906C094 /* ContentView.swift in Sources */,
+				8125F24839D243096B727050 /* DJAssistantService.swift in Sources */,
 				496D04F5C5D48B8327937245 /* DeckState.swift in Sources */,
 				1766E8CFD2F0576A131600CE /* DeckView.swift in Sources */,
 				BD5D5ABA53ECB032F8A7C7FD /* EQView.swift in Sources */,

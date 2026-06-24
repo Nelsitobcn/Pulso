@@ -47,24 +47,41 @@ struct PulsoApp: App {
         // sin depender de clics en la UI.
         if ProcessInfo.processInfo.environment["PULSO_YT_TEST"] == "1" {
             let yt = await YouTubeService()
-            for (query, deck) in [("lloraras oscar de leon", DeckID.left),
-                                  ("la vida es un carnaval celia cruz", DeckID.right)] {
+            // Bajar varias canciones de salsa para probar BPM (fix x2), SYNC y sugerencias IA.
+            let queries = ["lloraras oscar de leon", "vivir mi vida marc anthony",
+                           "la vida es un carnaval celia cruz", "suavemente elvis crespo"]
+            var loaded: [Track] = []
+            for query in queries {
                 do {
-                    NSLog("[Pulso-YTTEST] bajando: \(query)")
                     let url = try await yt.download(query: query)
                     let imported = await libraryService.importTracks(urls: [url])
-                    NSLog("[Pulso-YTTEST] '\(query)' → importadas=\(imported.count) lib=\(libraryService.tracks.count)")
-                    if let track = imported.first {
-                        audioEngine.load(track: track, into: deck)
-                        NSLog("[Pulso-YTTEST] cargada '\(track.title)' bpm=\(track.bpm ?? -1) en deck \(deck.rawValue)")
+                    if let t = imported.first {
+                        loaded.append(t)
+                        NSLog("[Pulso-YTTEST] '\(t.title)' bpm=\(t.bpm ?? -1) key=\(t.key?.rawValue ?? "?")")
                     }
                 } catch {
                     NSLog("[Pulso-YTTEST] ERROR '\(query)': \(error.localizedDescription)")
                 }
             }
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            audioEngine.togglePlay(deck: .left)
-            NSLog("[Pulso-YTTEST] PLAY deck A — isPlaying=\(audioEngine.deckA.isPlaying)")
+            // Cargar las 2 primeras y probar SYNC enlazándolas.
+            if loaded.count >= 2 {
+                audioEngine.load(track: loaded[0], into: .left)
+                audioEngine.load(track: loaded[1], into: .right)
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                audioEngine.togglePlay(deck: .left)
+                audioEngine.togglePlay(deck: .right)
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                audioEngine.sync(slave: .right)
+                NSLog("[Pulso-YTTEST] SYNC: A bpm=\(loaded[0].bpm ?? -1) B bpm=\(loaded[1].bpm ?? -1) B.tempo=\(audioEngine.deckB.tempo)")
+            }
+            // Probar la sugerencia IA con la canción del deck A.
+            if let current = audioEngine.deckA.track {
+                let dj = DJAssistantService()
+                await dj.suggest(current: current, library: libraryService.tracks)
+                for (i, s) in dj.suggestions.enumerated() {
+                    NSLog("[Pulso-YTTEST] IA #\(i+1): '\(s.track.title)' — \(s.reason)")
+                }
+            }
             return
         }
 

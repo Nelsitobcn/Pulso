@@ -6,6 +6,7 @@ struct LibraryView: View {
     @EnvironmentObject var audioEngine: AudioEngine
 
     @StateObject private var youtube = YouTubeService()
+    @StateObject private var djAssistant = DJAssistantService()
     @State private var searchQuery = ""
     @State private var youtubeQuery = ""
     @State private var youtubeError: String?
@@ -103,6 +104,14 @@ struct LibraryView: View {
 
             Divider()
 
+            // Caja "Mauri-Bot": cola sugerida por IA local
+            DJAssistantBox(assistant: djAssistant) {
+                let deck = audioEngine.deckA.track ?? audioEngine.deckB.track
+                guard let current = deck else { return }
+                Task { await djAssistant.suggest(current: current, library: libraryService.tracks) }
+            }
+            Divider()
+
             if !suggestions.isEmpty {
                 SuggestedTracksView(tracks: Array(suggestions.prefix(5)))
                 Divider()
@@ -152,6 +161,68 @@ struct LibraryView: View {
             case .bpm: return "BPM"
             }
         }
+    }
+}
+
+/// Caja "Mauri-Bot": botón que pide a la IA local la cola de próximas canciones,
+/// y muestra cada sugerencia con su motivo. Tocar una la carga en el deck B.
+struct DJAssistantBox: View {
+    @ObservedObject var assistant: DJAssistantService
+    @EnvironmentObject var audioEngine: AudioEngine
+    let onAsk: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.purple)
+                Text("DJ IA — ¿qué pongo después?")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if assistant.isThinking {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Sugerir", action: onAsk)
+                        .controlSize(.small)
+                }
+            }
+
+            if let err = assistant.errorText {
+                Text(err).font(.caption2).foregroundStyle(.secondary)
+            }
+
+            ForEach(Array(assistant.suggestions.enumerated()), id: \.element.id) { idx, s in
+                Button {
+                    audioEngine.load(track: s.track, into: .right)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("\(idx + 1)")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.purple)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(s.track.title)
+                                .font(.caption.bold())
+                                .lineLimit(1)
+                            Text(s.reason)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.right.circle")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 3)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.purple.opacity(0.07))
     }
 }
 
