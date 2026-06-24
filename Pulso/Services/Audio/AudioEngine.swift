@@ -342,6 +342,14 @@ final class AudioEngine: ObservableObject {
 
     /// Aplica tempo directo al nodo AVAudioUnitTimePitch (llamado desde slider)
     func applyTempo(_ newRate: Double, deck: DeckID) {
+        // ÁRBITRO de escritura sobre pitch.rate: el slider manual y el phase-lock continuo
+        // escriben el MISMO parámetro. Si el usuario mueve el tempo del deck que es el SLAVE
+        // de un SYNC activo, el timer del phase-lock lo pisaría 10×/seg ("lo hace muy mal").
+        // Comportamiento CDJ estándar: tocar el pitch a mano DESENGANCHA el sync de ese deck.
+        if phaseLockSlave == deck {
+            stopPhaseLock(restoreBaseRate: false)  // no restaurar: el slider manda ahora
+        }
+
         let pitch     = deck == .left ? pitchA : pitchB
         let deckState = deck == .left ? deckA  : deckB
         let rate      = max(newRate, 0.01)
@@ -464,11 +472,15 @@ final class AudioEngine: ObservableObject {
             }
     }
 
-    private func stopPhaseLock() {
+    /// Detiene el phase-lock continuo.
+    /// - Parameter restoreBaseRate: si `true`, devuelve el `pitch.rate` del slave a su tempo
+    ///   base exacto (caso normal: el deck para o se re-sincroniza). Si `false`, NO lo toca
+    ///   (caso árbitro: el slider acaba de fijar el rate manualmente y debe prevalecer).
+    private func stopPhaseLock(restoreBaseRate: Bool = true) {
         phaseLockTimer?.cancel()
         phaseLockTimer = nil
         // Restaurar el rate base exacto del slave al soltar el lock.
-        if let s = phaseLockSlave {
+        if restoreBaseRate, let s = phaseLockSlave {
             let pitch = s == .left ? pitchA : pitchB
             let deckState = s == .left ? deckA : deckB
             pitch.rate = Float(max(0.01, deckState.tempo))

@@ -26,6 +26,7 @@
 		7584B568FBA9280759BF1B90 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA79F8FEB8B728D87F5720E /* LibraryView.swift */; };
 		796864AE8CDAA7F220DEF0BD /* EQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A948DE4CE18404260A9E357 /* EQView.swift */; };
 		7BD8319F2F800D4BA5C9B253 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA79F8FEB8B728D87F5720E /* LibraryView.swift */; };
+		7C38B9502981AF118311588A /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */; };
 		82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
 		8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
 		9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
@@ -41,6 +42,7 @@
 		BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411EF2E560DB7B1047A38187 /* AudioEngine.swift */; };
 		C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
 		CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
+		CCE22B594C7E1EA9A42155D2 /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */; };
 		D1167B4DC0B49BFB5F7FD614 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
 		D1202606418785E211CA874B /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
 		DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
@@ -63,6 +65,7 @@
 		9A948DE4CE18404260A9E357 /* EQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQView.swift; sourceTree = "<group>"; };
 		B4B224FA76EEF28A68714440 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BA72FF8502521A96F5EA0F35 /* TurntableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurntableView.swift; sourceTree = "<group>"; };
+		CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeService.swift; sourceTree = "<group>"; };
 		D2257B39832162A06644607F /* MainDJView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDJView.swift; sourceTree = "<group>"; };
 		D50C755F757450A628F87FD9 /* MixSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixSession.swift; sourceTree = "<group>"; };
 		DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckView.swift; sourceTree = "<group>"; };
@@ -133,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */,
+				CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -254,10 +258,10 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					00CCCA07EC2D68935070C105 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = R2FJ7AYYTH;
 					};
 					8AD06FF975CE67F641429D66 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = R2FJ7AYYTH;
 					};
 				};
 			};
@@ -323,6 +327,7 @@
 				AB73C26E970E992033474A82 /* TrackAnalyzer.swift in Sources */,
 				A8F32EA969558D4A555AA032 /* TurntableView.swift in Sources */,
 				D1167B4DC0B49BFB5F7FD614 /* WaveformView.swift in Sources */,
+				CCE22B594C7E1EA9A42155D2 /* YouTubeService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -348,6 +353,7 @@
 				82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */,
 				378E950FF68FEB288C190A3C /* TurntableView.swift in Sources */,
 				DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */,
+				7C38B9502981AF118311588A /* YouTubeService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -436,7 +442,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = R2FJ7AYYTH;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -548,7 +554,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = R2FJ7AYYTH;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

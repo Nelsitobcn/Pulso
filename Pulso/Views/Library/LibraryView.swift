@@ -5,7 +5,10 @@ struct LibraryView: View {
     @EnvironmentObject var libraryService: LibraryService
     @EnvironmentObject var audioEngine: AudioEngine
 
+    @StateObject private var youtube = YouTubeService()
     @State private var searchQuery = ""
+    @State private var youtubeQuery = ""
+    @State private var youtubeError: String?
     @State private var sortBy: SortOption = .addedAt
 
     private var filteredTracks: [Track] {
@@ -30,11 +33,49 @@ struct LibraryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Barra de búsqueda y ordenación
+            // ── Descarga desde YouTube (destacada, arriba del todo) ──
+            VStack(spacing: 6) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.red)
+                    TextField("Buscar canción en YouTube y bajarla…", text: $youtubeQuery)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(downloadFromYouTube)
+                        .disabled(youtube.isDownloading)
+
+                    if youtube.isDownloading {
+                        ProgressView().controlSize(.small)
+                        Text(youtube.statusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 120, alignment: .leading)
+                    } else {
+                        Button(action: downloadFromYouTube) {
+                            Label("Bajar", systemImage: "square.and.arrow.down")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(youtubeQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                if let youtubeError {
+                    Text(youtubeError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.red.opacity(0.10))
+
+            Divider()
+
+            // Barra de búsqueda local y ordenación
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.tertiary)
-                TextField("Buscar por título, artista, género...", text: $searchQuery)
+                TextField("Filtrar biblioteca local…", text: $searchQuery)
                     .textFieldStyle(.plain)
 
                 Divider().frame(height: 16)
@@ -81,6 +122,23 @@ struct LibraryView: View {
             }
         }
         .background(Color("BGPrimary"))
+    }
+
+    /// Busca/baja de YouTube → analiza con el pipeline existente → entra en la biblioteca.
+    private func downloadFromYouTube() {
+        let query = youtubeQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return }
+        youtubeError = nil
+
+        Task {
+            do {
+                let localURL = try await youtube.download(query: query)
+                _ = await libraryService.importTracks(urls: [localURL])
+                youtubeQuery = ""
+            } catch {
+                youtubeError = error.localizedDescription
+            }
+        }
     }
 
     enum SortOption: String, CaseIterable, Identifiable {
