@@ -50,13 +50,30 @@ struct LibraryView: View {
                         Text(youtube.statusText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .frame(width: 120, alignment: .leading)
+                            .frame(width: 110, alignment: .leading)
                     } else {
+                        // Pre-escuchar: stream instantáneo (sin descargar) para auriculares.
+                        Button(action: previewFromYouTube) {
+                            Label("Pre-escuchar", systemImage: "headphones")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(youtubeQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+                        // Cargar al deck: descarga (rápida) → mezclable con EQ/SYNC/crossfader.
                         Button(action: downloadFromYouTube) {
-                            Label("Bajar", systemImage: "square.and.arrow.down")
+                            Label("Cargar al deck", systemImage: "square.and.arrow.down")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(youtubeQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                if youtube.isPreviewing {
+                    HStack(spacing: 8) {
+                        Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(.green)
+                        Text("En vivo: \(youtube.previewTitle)")
+                            .font(.caption).lineLimit(1)
+                        Spacer()
+                        Button("Detener") { youtube.stopPreview() }
+                            .controlSize(.mini)
                     }
                 }
                 if let youtubeError {
@@ -131,6 +148,17 @@ struct LibraryView: View {
             }
         }
         .background(Color("BGPrimary"))
+    }
+
+    /// Pre-escuchar: stream instantáneo de YouTube (sin descargar) para auriculares.
+    private func previewFromYouTube() {
+        let query = youtubeQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return }
+        youtubeError = nil
+        Task {
+            do { try await youtube.preview(query: query) }
+            catch { youtubeError = error.localizedDescription }
+        }
     }
 
     /// Busca/baja de YouTube → analiza con el pipeline existente → entra en la biblioteca.

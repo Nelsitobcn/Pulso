@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 
 /// Descarga audio de YouTube vía `yt-dlp` y lo convierte en pistas locales analizables.
 ///
@@ -32,6 +33,9 @@ final class YouTubeService: ObservableObject {
 
     @Published var isDownloading = false
     @Published var statusText = ""
+    @Published var isPreviewing = false
+    @Published var previewTitle = ""
+    private var previewPlayer: AVPlayer?
 
     /// Tamaño máximo de la caché de audio descargado (2 GB).
     private let maxCacheBytes: Int64 = 2 * 1024 * 1024 * 1024
@@ -46,6 +50,71 @@ final class YouTubeService: ObservableObject {
     }
 
     // MARK: - API pública
+
+    /// Resultado de un stream en vivo: URL directa (caduca ~6h) + metadatos para mostrar.
+    struct StreamResult {
+        let url: URL
+        let title: String
+        let artist: String
+        let durationSeconds: TimeInterval
+    }
+
+    /// PLAY EN VIVO — busca en YouTube y devuelve la URL de stream directa (sin descargar).
+    /// Reproduce al instante con AVPlayer. ⚠️ La URL caduca en ~6h: para sesiones largas usar
+    /// `download`. Ideal para previsualizar o lanzar un tema rápido.
+    func streamURL(query: String) async throws -> StreamResult {
+        #if !os(macOS)
+        throw YouTubeError.unsupportedPlatform
+        #else
+        guard let ytdlp = Self.ytdlpPath() else { throw YouTubeError.ytdlpNotFound }
+        isDownloading = true
+        statusText = "Buscando…"
+        defer { isDownloading = false }
+
+        let target = Self.isYouTubeURL(query) ? query : "ytsearch1:\(query)"
+        // Pide URL + título + artista + duración en líneas separadas (--print).
+        let args = [
+            target, "-f", "bestaudio", "--no-playlist", "--no-warnings", "--no-update",
+            "--print", "urls",
+            "--print", "title",
+            "--print", "%(artist,uploader|)s",
+            "--print", "%(duration)s"
+        ]
+        let output = try await Self.run(executable: ytdlp, arguments: args)
+        let lines = output.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }
+        guard let urlLine = lines.first(where: { $0.hasPrefix("http") }),
+              let url = URL(string: urlLine) else { throw YouTubeError.noResult }
+
+        // Tras la URL vienen title, artist, duration (en ese orden).
+        let after = lines.drop(while: { !$0.hasPrefix("http") }).dropFirst()
+        let meta = Array(after)
+        let title = meta.first ?? query
+        let artist = meta.count > 1 && !meta[1].isEmpty ? meta[1] : "YouTube"
+        let dur = meta.count > 2 ? (Double(meta[2]) ?? 0) : 0
+
+        statusText = "En vivo"
+        return StreamResult(url: url, title: title, artist: artist, durationSeconds: dur)
+        #endif
+    }
+
+    /// Reproduce un stream de YouTube en vivo con AVPlayer (preescucha en auriculares).
+    /// No pasa por el motor de DJ (sin EQ/SYNC) — es solo previsualización.
+    func preview(query: String) async throws {
+        stopPreview()
+        let result = try await streamURL(query: query)
+        let player = AVPlayer(url: result.url)
+        previewPlayer = player
+        previewTitle = "\(result.artist) — \(result.title)"
+        isPreviewing = true
+        player.play()
+    }
+
+    func stopPreview() {
+        previewPlayer?.pause()
+        previewPlayer = nil
+        isPreviewing = false
+        previewTitle = ""
+    }
 
     /// Busca en YouTube por texto libre (o acepta una URL directa) y descarga el primer
     /// resultado como `.m4a` en la caché. Devuelve la URL local del archivo descargado.
