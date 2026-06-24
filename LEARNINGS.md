@@ -68,3 +68,15 @@
 **Bug**: botón rojo "T" (acelera 2s y vuelve) visible en los controles de transporte; era solo para verificar TimePitch durante desarrollo.
 **Fix**: eliminado el botón en `TransportControlsView` y el método `testSetRate(_:deck:)` en `AudioEngine` (verificado con grep que no quedaban referencias).
 **Regla**: marcar el código de debugging con `// TEST` o `#if DEBUG` desde el inicio para poder localizarlo y quitarlo antes de release.
+
+### [2026-06-24] — App GUI no encuentra yt-dlp/ffmpeg/deno (PATH minimal)
+**Bug**: el buscador de YouTube "no bajaba nada" desde la app, aunque el comando yt-dlp funcionaba en terminal. Fallo silencioso.
+**Causa raíz**: una app macOS lanzada por Finder/`open` hereda un PATH minimal (`/usr/bin:/bin`), SIN `/opt/homebrew/bin`. yt-dlp llama a `ffmpeg` (extraer audio) y `deno` (resolver retos JS de YouTube) por nombre → no los encuentra → falla.
+**Cómo se diagnosticó**: reproducir el comando con `env -i PATH=/usr/bin:/bin yt-dlp ...` → mismo error que en la app. Confirmó que era el PATH, no yt-dlp.
+**Fix**: en `YouTubeService.run()` inyectar `process.environment["PATH"]` con `/opt/homebrew/bin` delante + pasar `--ffmpeg-location /opt/homebrew/bin` a yt-dlp.
+**Regla**: cualquier `Process` que invoque un binario de Homebrew desde una app GUI DEBE inyectar el PATH en `process.environment` y/o pasar rutas absolutas. Nunca asumir que la app hereda el PATH del shell.
+**Files**: `Pulso/Services/Library/YouTubeService.swift`
+
+### [2026-06-24] — Verificar UI sin poder clicar: auto-test gated por env var
+**Aprendizaje**: automatizar clics en la app (cliclick/AppleScript por coordenadas) es frágil y falla a menudo. Para verificar un flujo de UI de verdad sin clicar, usar un hook de auto-test bajo `#if DEBUG` disparado por variable de entorno (ej. `PULSO_YT_TEST=1`) que ejercita el código real (descarga→análisis→deck→play) y deja evidencia (NSLog + archivos + estado observable por captura).
+**Files**: `Pulso/App/PulsoApp.swift`
