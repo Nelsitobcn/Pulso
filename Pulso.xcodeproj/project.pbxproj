@@ -44,10 +44,12 @@
 		BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411EF2E560DB7B1047A38187 /* AudioEngine.swift */; };
 		C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
 		CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
+		CC78F29C51EB32C3546AD38C /* SessionStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44453B15CFF2ACA9636C23BE /* SessionStartView.swift */; };
 		CCE22B594C7E1EA9A42155D2 /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */; };
 		D1167B4DC0B49BFB5F7FD614 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
 		D1202606418785E211CA874B /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
 		DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
+		E554485012D958FAE47AF137 /* SessionStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44453B15CFF2ACA9636C23BE /* SessionStartView.swift */; };
 		FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA178B499D53592DEFA10D25 /* AuthService.swift */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +60,7 @@
 		2E5E21D4D210CC88810826FE /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4025F6E1D12DE7F0495E0039 /* Pulso.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pulso.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		411EF2E560DB7B1047A38187 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
+		44453B15CFF2ACA9636C23BE /* SessionStartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStartView.swift; sourceTree = "<group>"; };
 		52794CFBE0F6E6538CCA811D /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		5A668A5FF3746B5387DC0C94 /* Track.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Track.swift; sourceTree = "<group>"; };
 		5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryService.swift; sourceTree = "<group>"; };
@@ -131,6 +134,7 @@
 			isa = PBXGroup;
 			children = (
 				2DA79F8FEB8B728D87F5720E /* LibraryView.swift */,
+				44453B15CFF2ACA9636C23BE /* SessionStartView.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -326,6 +330,7 @@
 				CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */,
 				A1907425604B3FE06C79961A /* MixSession.swift in Sources */,
 				082CEA6CFA785BF9B98A7499 /* PulsoApp.swift in Sources */,
+				E554485012D958FAE47AF137 /* SessionStartView.swift in Sources */,
 				05D79F1A64133D932772B260 /* SettingsView.swift in Sources */,
 				A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */,
 				B90EDD594F6A59015758CB63 /* Track.swift in Sources */,
@@ -353,6 +358,7 @@
 				BBFC1A117BA4EBEFDE0EDDE6 /* MainDJView.swift in Sources */,
 				9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */,
 				5A02530A377ACAFE5DCAC647 /* PulsoApp.swift in Sources */,
+				CC78F29C51EB32C3546AD38C /* SessionStartView.swift in Sources */,
 				320604246522AE05D48861D0 /* SettingsView.swift in Sources */,
 				B61692FAB12227CC8699FF97 /* TopBarView.swift in Sources */,
 				8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */,

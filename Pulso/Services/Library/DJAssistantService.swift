@@ -21,6 +21,9 @@ final class DJAssistantService: ObservableObject {
     @Published var isThinking = false
     @Published var errorText: String?
 
+    /// Cola de la sesión generada al inicio (orden ideal de reproducción para el mood elegido).
+    @Published var sessionQueue: [Suggestion] = []
+
     private let ollamaURL = URL(string: "http://localhost:11434/api/generate")!
     private let model = "qwen3-coder:30b-a3b-q4_K_M"
 
@@ -45,6 +48,75 @@ final class DJAssistantService: ObservableObject {
             suggestions = candidates.prefix(5).map {
                 Suggestion(track: $0, reason: reasonFor(current: current, next: $0))
             }
+        }
+    }
+
+    /// Arma la cola de una SESIÓN a partir de un mood/estilo (ej. "salsa", "techno peak time",
+    /// "calentamiento chill") usando toda la biblioteca. La IA ordena por flujo de energía y
+    /// compatibilidad armónica/BPM. Si Ollama falla, ordena por energía ascendente.
+    func buildSession(mood: String, library: [Track]) async {
+        isThinking = true
+        errorText = nil
+        defer { isThinking = false }
+
+        guard !library.isEmpty else {
+            sessionQueue = []
+            errorText = "La biblioteca está vacía. Baja o importa canciones primero."
+            return
+        }
+
+        if let aiOrder = await askOllamaSession(mood: mood, pool: library) {
+            sessionQueue = aiOrder
+        } else {
+            // Fallback: ordenar por energía ascendente (warm-up → peak).
+            sessionQueue = library
+                .sorted { ($0.energy ?? 0) < ($1.energy ?? 0) }
+                .prefix(10)
+                .map { Suggestion(track: $0, reason: "Orden por energía") }
+        }
+    }
+
+    private func askOllamaSession(mood: String, pool: [Track]) async -> [Suggestion]? {
+        let top = Array(pool.prefix(30))   // límite razonable para el prompt
+        let list = top.enumerated().map { i, t in
+            "\(i): \"\(t.title)\" — \(t.artist) — \(t.bpm.map { String(format: "%.0f BPM", $0) } ?? "?BPM") — key \(t.key?.rawValue ?? "?")"
+        }.joined(separator: "\n")
+
+        let prompt = """
+        Eres un DJ experto montando el SET de esta noche. El estilo/mood pedido es: "\(mood)".
+
+        Biblioteca disponible (índice: tema):
+        \(list)
+
+        Selecciona y ORDENA hasta 10 canciones que encajen con "\(mood)", formando una progresión
+        coherente: empieza más suave/baja energía y sube hacia el clímax, encadenando por
+        compatibilidad armónica (Camelot) y BPM cercano. Si una canción no pega con el mood,
+        descártala. Devuelve SOLO un array JSON, sin texto extra:
+        [{"i": <índice>, "reason": "<motivo corto en español>"}]
+        """
+
+        let body: [String: Any] = [
+            "model": model, "prompt": prompt, "stream": false,
+            "format": "json", "options": ["temperature": 0.5]
+        ]
+        do {
+            var req = URLRequest(url: ollamaURL)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+            req.timeoutInterval = 90
+            let (data, _) = try await URLSession.shared.data(for: req)
+            guard let outer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let responseStr = outer["response"] as? String,
+                  let innerData = responseStr.data(using: .utf8) else { return nil }
+            let parsed = parseAIArray(innerData)
+            guard !parsed.isEmpty else { return nil }
+            return parsed.compactMap { item in
+                guard item.i >= 0, item.i < top.count else { return nil }
+                return Suggestion(track: top[item.i], reason: item.reason)
+            }
+        } catch {
+            return nil
         }
     }
 
