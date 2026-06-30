@@ -15,7 +15,7 @@ struct PulsoApp: App {
                 .onAppear {
                     #if DEBUG
                     let env = ProcessInfo.processInfo.environment
-                    if env["PULSO_AUTO_TEST"] == "1" || env["PULSO_YT_TEST"] == "1" {
+                    if env["PULSO_AUTO_TEST"] == "1" || env["PULSO_YT_TEST"] == "1" || env["PULSO_BEATGRID_TEST"] == "1" {
                         Task {
                             await autoTestPlayback()
                         }
@@ -41,6 +41,32 @@ struct PulsoApp: App {
     #if DEBUG
     private func autoTestPlayback() async {
         try? await Task.sleep(nanoseconds: 600_000_000)
+
+        // Modo test del beatgrid (Sesión 1, jul-2026): analiza los kicks de BPM conocido en
+        // ~/Music/PulsoTest y vuelca la rejilla. Verifica de forma EJECUTABLE que el motor de
+        // beatgrid genera beats en las posiciones correctas (cada 60/BPM s) y detecta el BPM.
+        if ProcessInfo.processInfo.environment["PULSO_BEATGRID_TEST"] == "1" {
+            let testDir = ("~/Music/PulsoTest" as NSString).expandingTildeInPath
+            let cases: [(String, Double)] = [("Kick - 120 BPM.wav", 120), ("Kick - 128 BPM.wav", 128)]
+            for (file, expected) in cases {
+                let url = URL(fileURLWithPath: testDir).appendingPathComponent(file)
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    NSLog("[Pulso-BEATGRID] FALTA \(file)"); continue
+                }
+                var track = Track.from(url: url)
+                await TrackAnalyzer.shared.analyze(track: &track)
+                guard let g = track.beatGrid else {
+                    NSLog("[Pulso-BEATGRID] '\(file)' SIN beatGrid (bpm=\(track.bpm ?? -1))"); continue
+                }
+                let intervals = zip(g.beats.dropFirst(), g.beats).map { $0 - $1 }
+                let medInterval = intervals.sorted()[max(0, intervals.count / 2)]
+                let bpmFromGrid = intervals.isEmpty ? 0 : 60.0 / medInterval
+                let first5 = g.beats.prefix(5).map { String(format: "%.3f", $0) }.joined(separator: ", ")
+                NSLog("[Pulso-BEATGRID] '\(file)' esperado=\(expected) | grid.bpm=\(g.bpm) beats=\(g.beats.count) medInterval=\(String(format: "%.4f", medInterval))s ⇒ BPM=\(String(format: "%.1f", bpmFromGrid)) downbeatIdx=\(g.downbeatIndex.map(String.init) ?? "nil") conf=\(String(format: "%.2f", g.confidence)) varTempo=\(g.isVariableTempo)")
+                NSLog("[Pulso-BEATGRID]   primeros beats(s): [\(first5)]")
+            }
+            return
+        }
 
         // Modo test del flujo YouTube end-to-end: baja 2 canciones de YouTube, las carga
         // en ambos decks y las reproduce. Verifica descarga→análisis→biblioteca→deck→play

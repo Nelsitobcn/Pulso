@@ -13,9 +13,16 @@ actor TrackAnalyzer {
         guard let (buffer, format) = await loadAudioBuffer(url: url) else { return }
 
         track.duration = await getDuration(url: url)
-        track.bpm = detectBPM(buffer: buffer, sampleRate: format.sampleRate)
         track.key = detectKey(buffer: buffer, sampleRate: format.sampleRate)
         track.waveformData = buildWaveform(buffer: buffer, targetSamples: 512)
+
+        // Beatgrid + downbeat (Sesión 1, jul-2026). Sustituye al antiguo `detectBPM` de un solo
+        // número: ahora calculamos el envelope de onset una vez y de ahí salen TANTO el BPM como
+        // las posiciones de cada beat (DP tipo Ellis) y el downbeat. El SYNC usará la rejilla.
+        let grid = detectBeatGrid(buffer: buffer, sampleRate: format.sampleRate)
+        track.beatGrid = grid
+        // `bpm` se mantiene como campo propio (UI, sugerencias, SYNC legacy). Sale del grid si lo hay.
+        track.bpm = grid?.bpm ?? detectBPM(buffer: buffer, sampleRate: format.sampleRate)
     }
 
     // MARK: - Duración
@@ -249,7 +256,12 @@ actor TrackAnalyzer {
         do {
             let file = try AVAudioFile(forReading: url)
             let format = file.processingFormat
-            let maxFrames = AVAudioFrameCount(min(file.length, AVAudioFramePosition(format.sampleRate * 60)))
+            // Analizar el TRACK ENTERO, no solo los primeros 60s. El shortcut de 60s fallaba en
+            // intros largas/ambient y daba BPM de intro ≠ BPM del drop (hallazgo concilio+NBLM
+            // jul-2026). En M3 Ultra el análisis completo es de milisegundos. Cap de seguridad a
+            // 12 min para que un archivo gigante no agote RAM (a 44.1kHz mono ≈ 127 MB de floats).
+            let maxSeconds = 12.0 * 60.0
+            let maxFrames = AVAudioFrameCount(min(file.length, AVAudioFramePosition(format.sampleRate * maxSeconds)))
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: maxFrames) else { return nil }
             try file.read(into: buffer, frameCount: maxFrames)
             return (buffer, format)

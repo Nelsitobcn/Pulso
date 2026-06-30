@@ -1,5 +1,46 @@
 import Foundation
 
+/// Rejilla de beats de una pista. Es el resultado de `TrackAnalyzer` y la fuente de verdad
+/// para el SYNC de fase real (no contra t=0). Diseño "robusto y barato" decidido por concilio
+/// (Gemini + Codex + Claude) + research NotebookLM (deep, 98 fuentes, jul-2026): Swift puro,
+/// Dynamic Programming tipo Ellis 2007, SIN librería externa (aubio/BTrack/QM/Essentia son
+/// todas GPL/AGPL → veneno para App Store; ése fue el hallazgo crítico del research).
+///
+/// Se guarda como array de timestamps reales de cada beat (`beats`, en segundos, tiempo de
+/// archivo). El SYNC reconstruye la fase buscando el beat más cercano al playhead. `downbeatIndex`
+/// marca cuál de los beats es el "1" del compás (heurística sub-bass + cambio armónico; puede
+/// fallar en salsa/funk → la UI debe permitir corregirlo a mano en Sesión 2).
+struct BeatGrid: Codable, Equatable {
+    /// Timestamps de cada beat detectado, en segundos desde el inicio del archivo. Ordenado.
+    var beats: [Double]
+    /// Índice dentro de `beats` del primer downbeat fiable (el "1"). `nil` si no se pudo resolver.
+    var downbeatIndex: Int?
+    /// Beats por compás (4 por defecto, 4/4). El downbeat se repite cada `beatsPerBar`.
+    var beatsPerBar: Int
+    /// BPM global estimado (mediana de los intervalos entre beats). Para UI y time-stretch.
+    var bpm: Double
+    /// Confianza 0…1 de la detección (fuerza del pico de autocorrelación normalizada).
+    var confidence: Double
+    /// `true` si el tempo varía > ~1.5% entre ventanas → el beatgrid dinámico importa de verdad.
+    var isVariableTempo: Bool
+
+    init(beats: [Double], downbeatIndex: Int? = nil, beatsPerBar: Int = 4,
+         bpm: Double, confidence: Double = 0, isVariableTempo: Bool = false) {
+        self.beats = beats
+        self.downbeatIndex = downbeatIndex
+        self.beatsPerBar = beatsPerBar
+        self.bpm = bpm
+        self.confidence = confidence
+        self.isVariableTempo = isVariableTempo
+    }
+
+    /// Timestamp del primer downbeat ("1") fiable, o `nil` si no hay downbeat resuelto.
+    var firstDownbeat: Double? {
+        guard let i = downbeatIndex, beats.indices.contains(i) else { return nil }
+        return beats[i]
+    }
+}
+
 struct Track: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -11,6 +52,9 @@ struct Track: Identifiable, Codable, Equatable {
     var energy: Double?       // 0.0 – 1.0
     var genre: String?
     var waveformData: [Float]? // muestras normalizadas para dibujar waveform
+    /// Rejilla de beats + downbeat. La calcula `TrackAnalyzer`. El SYNC la usará para alinear
+    /// fase real (Sesión 2). `bpm` se mantiene aparte por compatibilidad con UI/sugerencias.
+    var beatGrid: BeatGrid?
     var addedAt: Date
 
     init(
@@ -24,6 +68,7 @@ struct Track: Identifiable, Codable, Equatable {
         energy: Double? = nil,
         genre: String? = nil,
         waveformData: [Float]? = nil,
+        beatGrid: BeatGrid? = nil,
         addedAt: Date = Date()
     ) {
         self.id = id
@@ -36,6 +81,7 @@ struct Track: Identifiable, Codable, Equatable {
         self.energy = energy
         self.genre = genre
         self.waveformData = waveformData
+        self.beatGrid = beatGrid
         self.addedAt = addedAt
     }
 

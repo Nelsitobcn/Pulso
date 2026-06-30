@@ -42,12 +42,14 @@
 		BBFC1A117BA4EBEFDE0EDDE6 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
 		BD5D5ABA53ECB032F8A7C7FD /* EQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A948DE4CE18404260A9E357 /* EQView.swift */; };
 		BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411EF2E560DB7B1047A38187 /* AudioEngine.swift */; };
+		C2C5EACE7DBE386C815AAA07 /* BeatGridAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */; };
 		C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
 		CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
 		CC78F29C51EB32C3546AD38C /* SessionStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44453B15CFF2ACA9636C23BE /* SessionStartView.swift */; };
 		CCE22B594C7E1EA9A42155D2 /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */; };
 		D1167B4DC0B49BFB5F7FD614 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
 		D1202606418785E211CA874B /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
+		DA61DDAEB0AAFBD93FD5E054 /* BeatGridAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */; };
 		DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
 		E554485012D958FAE47AF137 /* SessionStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44453B15CFF2ACA9636C23BE /* SessionStartView.swift */; };
 		FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA178B499D53592DEFA10D25 /* AuthService.swift */; };
@@ -66,6 +68,7 @@
 		5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryService.swift; sourceTree = "<group>"; };
 		60D48E68275DA49116EBC6A2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6473E4169BDDA444411FE978 /* PulsoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulsoApp.swift; sourceTree = "<group>"; };
+		7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatGridAnalyzer.swift; sourceTree = "<group>"; };
 		8236C939D512E4F41F901C83 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		9A948DE4CE18404260A9E357 /* EQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQView.swift; sourceTree = "<group>"; };
 		B4B224FA76EEF28A68714440 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -94,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				411EF2E560DB7B1047A38187 /* AudioEngine.swift */,
+				7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */,
 				F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */,
 			);
 			path = Audio;
@@ -319,6 +323,7 @@
 			files = (
 				BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */,
 				26821B50E7919303759F9083 /* AuthService.swift in Sources */,
+				C2C5EACE7DBE386C815AAA07 /* BeatGridAnalyzer.swift in Sources */,
 				C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */,
 				64B61280810F807CED4B0931 /* ContentView.swift in Sources */,
 				AB13A10C5A332A0D5E920CD4 /* DJAssistantService.swift in Sources */,
@@ -347,6 +352,7 @@
 			files = (
 				556C9F27E9B010B3B8C95E0A /* AudioEngine.swift in Sources */,
 				FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */,
+				DA61DDAEB0AAFBD93FD5E054 /* BeatGridAnalyzer.swift in Sources */,
 				53AE6F640F0BCB770FC1BF37 /* CenterControlsView.swift in Sources */,
 				0F1F35AE043D3CF6F906C094 /* ContentView.swift in Sources */,
 				8125F24839D243096B727050 /* DJAssistantService.swift in Sources */,
