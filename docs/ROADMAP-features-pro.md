@@ -443,5 +443,62 @@ Al mover el slider del slave con SYNC activo, el timer lo pisa 10×/seg → "lo 
 
 ---
 
-**Última revisión:** 23-jun-2026 (anexo auditoría Fugu)  
-**Próxima revisión:** 15-ago-2026 (post-Ola 1 MVP)
+# ANEXO B — Beatgrid Sesión 1 (1-jul-2026): veredicto concilio + research + qué se hizo
+
+> **Método:** research NotebookLM **deep** (98 fuentes, notebook DJ `8885a4a5`) + concilio
+> multi-modelo real (Gemini 2.5 Pro + Codex + Claude, prompts paralelos con el código real).
+> Decisión owner: **"solo lo robusto y barato"**.
+
+## B1 — Veredicto: CONSENSO UNÁNIME 4/4
+
+**Beatgrid + downbeat en SWIFT PURO + Accelerate/vDSP, Dynamic Programming tipo Ellis 2007.
+NADA de librería externa.**
+
+**Hallazgo crítico (solo salió por NBLM, invalida meter aubio):** aubio NO es BSD como cree
+mucha gente — es **GPL-3**. aubio, BTrack, QM-DSP, Essentia → **todas GPL/AGPL copyleft = veneno
+para App Store** (Pulso Fase 3). Linkar cualquiera bloquea la distribución. → Swift puro no es
+solo lo barato, es lo único legalmente viable a futuro. (BeatNet/Beat This! son MIT pero ML
+pesado: modelo ~97MB + ONNX/CoreML, descartado para "barato".)
+
+**Todos coinciden en:** beats por DP Ellis (NBLM dio el código `AccelBeatTracker` casi listo);
+downbeat heurístico 4/4 = energía sub-bass <150Hz + cambio armónico chroma cada 4 beats, **es
+heurística NO certeza → la UI DEBE dejar corregir el downbeat a mano** (Sesión 2); analizar
+**track entero** (el shortcut de 60s es obsoleto en M3); `Double` siempre (0.02 BPM error = 60ms
+drift en 6min = clash audible).
+
+**Grid fijo vs dinámico:** Mixxx/Rekordbox usan **híbrido piecewise-constant** (segmentos de
+tempo local constante). Decisión: **empezar fijo** (BPM+fase+downbeat); el híbrido solo si
+Nelson nota drift en tracks con batería en vivo. No sobre-ingenierizar la v1.
+
+## B2 — Qué se implementó (rama `feat/beatgrid-sesion1`, commit 89b02d8)
+
+- `Track.BeatGrid` (beats[], downbeatIndex, beatsPerBar, bpm, confidence, isVariableTempo).
+  Codable, persistencia round-trip JSON verificada. `bpm` legacy intacto → no rompe UI/SYNC/sugerencias.
+- `TrackAnalyzer`: fix 60s → track entero (cap 12min).
+- `BeatGridAnalyzer.swift` (nuevo, 0 deps): onset spectral-flux multibanda (mono mix) →
+  autocorrelación lag-a-lag (`vDSP_dotpr`) ponderada log-normal → DP Ellis → beats → downbeat
+  sub-bass con guard de confianza (devuelve `nil` honesto si la fase del "1" es ambigua).
+- Auto-test `PULSO_BEATGRID_TEST` (reproducible).
+
+**Verificado (output ejecutable):** Kick 120→grid.bpm 120.1 (119 beats, 0.499s); Kick 128→127.9
+(127 beats, 0.470s). Beats en posiciones reales equiespaciadas, no t=0. Build OK, sin crash.
+
+**Verifier Fugu cazó 2 bugs reales (arreglados + reverificados):** (1) overflow `vDSP_conv`
+(escribía 2N-1 en buffer de N → corrupción memoria) → reescrito a `vDSP_dotpr` lag-a-lag, imposible
+desbordar; (2) `downbeatIndex` devolvía fase como índice ambiguo → ahora `nil` con guard ≥15%.
+
+## B3 — Pendiente Sesión 2 (conectar SYNC + UI)
+
+- **Conectar el SYNC al beatgrid**: `AudioEngine.startPhaseLock` hoy alinea fase *dentro de un
+  beat* contra t=0 (`mTime mod beatMasterFile`). Cambiar a: buscar el beat real más cercano en
+  `beatGrid.beats` del master y del slave, alinear por `beatIndex % beatsPerBar` si hay downbeat
+  fiable, si no beat-a-beat. La fase sale del grid, el BPM del time-stretch.
+- **UI "Set Downbeat Here"**: botón para fijar el "1" a mano (la heurística sub-bass falla en
+  salsa/funk — confirmado: en kicks puros sin armonía devuelve `nil`, correcto).
+- **Casos borde anotados (no bloquean, Verifier Fugu):** validar sampleRate variable (VBR),
+  análisis en background para tracks de 12min, fusión bpm-legacy/grid por confianza. Menores.
+
+---
+
+**Última revisión:** 1-jul-2026 (Anexo B — beatgrid Sesión 1)  
+**Próxima revisión:** 15-ago-2026 (post-Ola 1 MVP) · o al arrancar Sesión 2 (SYNC+UI)
