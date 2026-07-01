@@ -30,6 +30,7 @@
 		8125F24839D243096B727050 /* DJAssistantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */; };
 		82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
 		8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
+		99183358CAF057224FF4242C /* trending.json in Resources */ = {isa = PBXBuildFile; fileRef = F2777A11FF7ABCF4EAD39B5E /* trending.json */; };
 		9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
 		A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B91547CC68CB6AB7492D15 /* TopBarView.swift */; };
 		A1907425604B3FE06C79961A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
@@ -51,6 +52,7 @@
 		D1202606418785E211CA874B /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
 		DA61DDAEB0AAFBD93FD5E054 /* BeatGridAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */; };
 		DCD8C3A9C1CDD16A788BCF1E /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52794CFBE0F6E6538CCA811D /* WaveformView.swift */; };
+		DD49892BFBEE3CA5FB7B075B /* trending.json in Resources */ = {isa = PBXBuildFile; fileRef = F2777A11FF7ABCF4EAD39B5E /* trending.json */; };
 		E554485012D958FAE47AF137 /* SessionStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44453B15CFF2ACA9636C23BE /* SessionStartView.swift */; };
 		FAB81D2A738FFC7609B57AD4 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA178B499D53592DEFA10D25 /* AuthService.swift */; };
 /* End PBXBuildFile section */
@@ -79,6 +81,7 @@
 		D50C755F757450A628F87FD9 /* MixSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixSession.swift; sourceTree = "<group>"; };
 		DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckView.swift; sourceTree = "<group>"; };
 		EC039E9801B84A3FEA3D4DC3 /* Pulso.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pulso.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F2777A11FF7ABCF4EAD39B5E /* trending.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = trending.json; sourceTree = "<group>"; };
 		F2B91547CC68CB6AB7492D15 /* TopBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopBarView.swift; sourceTree = "<group>"; };
 		F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackAnalyzer.swift; sourceTree = "<group>"; };
 		FA178B499D53592DEFA10D25 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
@@ -120,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				60D48E68275DA49116EBC6A2 /* Assets.xcassets */,
+				F2777A11FF7ABCF4EAD39B5E /* trending.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -303,6 +307,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0B8AF121B1468B769BCE60C5 /* Assets.xcassets in Resources */,
+				DD49892BFBEE3CA5FB7B075B /* trending.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,6 +316,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB8081479D7F744AD98B386F /* Assets.xcassets in Resources */,
+				99183358CAF057224FF4242C /* trending.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -11,10 +11,41 @@ import Foundation
 @MainActor
 final class DJAssistantService: ObservableObject {
 
+    /// Origen de una sugerencia: de la biblioteca local o de las tendencias globales.
+    enum Origin: Equatable {
+        case local
+        /// De tendencias y NO está en la biblioteca → hay que buscarla en YouTube.
+        /// Lleva el query listo para el panel de búsqueda.
+        case trending(youtubeQuery: String)
+    }
+
     struct Suggestion: Identifiable {
         let id = UUID()
         let track: Track
         let reason: String
+        var origin: Origin = .local
+    }
+
+    /// Un tema de tendencia (fichero curado `trending.json`, extensible a scraper).
+    struct TrendingTrack: Codable {
+        let title: String
+        let artist: String
+        let genre: String
+        let bpm: Double
+        let camelot: String
+        let energy: Double
+    }
+
+    /// Tendencias globales cargadas del fichero curado. Vacío si no se pudo leer.
+    private(set) var trending: [TrendingTrack] = []
+
+    /// Carga `trending.json` del bundle (una vez). Seguro si falta: deja la lista vacía.
+    func loadTrendingIfNeeded() {
+        guard trending.isEmpty,
+              let url = Bundle.main.url(forResource: "trending", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return }
+        struct File: Codable { let tracks: [TrendingTrack] }
+        trending = (try? JSONDecoder().decode(File.self, from: data))?.tracks ?? []
     }
 
     @Published var suggestions: [Suggestion] = []
@@ -49,6 +80,61 @@ final class DJAssistantService: ObservableObject {
                 Suggestion(track: $0, reason: reasonFor(current: current, next: $0))
             }
         }
+    }
+
+    /// Sugerencia HÍBRIDA: mezcla la biblioteca local con las tendencias globales curadas.
+    /// - Los temas locales compatibles se ordenan por el score de siempre (Camelot+BPM+energía).
+    /// - Los temas de tendencia compatibles con el actual que NO están en la biblioteca se
+    ///   añaden marcados como `.trending` con un query de YouTube listo para el panel #3.
+    /// El resultado intercala ambos para que el DJ vea "lo que tiene" y "lo que suena fuera".
+    func suggestHybrid(current: Track, library: [Track]) async {
+        isThinking = true
+        errorText = nil
+        defer { isThinking = false }
+        loadTrendingIfNeeded()
+
+        // 1) Locales (reusa la lógica existente).
+        let localRanked = rankCandidates(current: current, pool: library)
+        let localSug = localRanked.prefix(5).map {
+            Suggestion(track: $0, reason: reasonFor(current: current, next: $0), origin: .local)
+        }
+
+        // 2) Tendencias compatibles que NO están ya en la biblioteca.
+        let libraryKeys = Set(library.map { "\($0.title.lowercased())|\($0.artist.lowercased())" })
+        let curBPM = (current.bpm ?? 0) * 1.0
+        let trendingSug: [Suggestion] = trending.compactMap { t in
+            let key = "\(t.title.lowercased())|\(t.artist.lowercased())"
+            if libraryKeys.contains(key) { return nil }   // ya la tienes local → no duplicar
+            // Filtro de compatibilidad ligero: BPM dentro de ±12% (incluye doble/mitad) o Camelot igual.
+            let bpmOK = curBPM <= 0 || bpmCompatible(curBPM, t.bpm)
+            let keyOK = current.key?.rawValue == t.camelot
+            guard bpmOK || keyOK else { return nil }
+            // Track "fantasma" (no descargado): sirve para mostrar título/artista/bpm en la UI.
+            let ghost = Track(title: t.title, artist: t.artist,
+                              url: URL(fileURLWithPath: "/trending/\(t.title)"),
+                              bpm: t.bpm, key: MusicalKey(rawValue: t.camelot), genre: t.genre)
+            let reason = "🔥 Tendencia (\(t.genre)) · \(Int(t.bpm)) BPM \(t.camelot) — búscala en YouTube"
+            return Suggestion(track: ghost, reason: reason,
+                              origin: .trending(youtubeQuery: "\(t.artist) \(t.title)"))
+        }
+
+        // 3) Intercalar: primero 3 locales, luego tendencias, luego el resto local.
+        var mixed: [Suggestion] = []
+        mixed.append(contentsOf: localSug.prefix(3))
+        mixed.append(contentsOf: trendingSug.prefix(3))
+        mixed.append(contentsOf: localSug.dropFirst(3))
+
+        if mixed.isEmpty {
+            errorText = "No hay canciones compatibles (ni local ni en tendencias)."
+        }
+        suggestions = mixed
+    }
+
+    /// BPM compatible: exacto (≤8%) o en relación doble/mitad (≤8%).
+    private func bpmCompatible(_ a: Double, _ b: Double) -> Bool {
+        guard a > 0, b > 0 else { return false }
+        let ratios = [1.0, 2.0, 0.5]
+        return ratios.contains { abs(a - b * $0) / a <= 0.08 }
     }
 
     /// Arma la cola de una SESIÓN a partir de un mood/estilo (ej. "salsa", "techno peak time",

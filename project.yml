@@ -40,6 +40,7 @@ targets:
           - "**/*.md"
     resources:
       - path: Pulso/Resources/Assets.xcassets
+      - path: Pulso/Resources/trending.json
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nelsitobcn.pulso

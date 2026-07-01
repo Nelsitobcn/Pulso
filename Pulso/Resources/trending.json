@@ -1,0 +1,18 @@
+{
+  "updated": "2026-07-01",
+  "note": "Tendencias curadas a mano (salsa, reparto/cubatón, comercial latino). Extensible: la misma estructura la puede rellenar un scraper de charts en el futuro. BPM/Camelot son aproximados para el matching; el análisis real se hace al descargar la pista.",
+  "tracks": [
+    { "title": "Vivir Mi Vida", "artist": "Marc Anthony", "genre": "salsa", "bpm": 92, "camelot": "8A", "energy": 0.8 },
+    { "title": "La Vida Es Un Carnaval", "artist": "Celia Cruz", "genre": "salsa", "bpm": 90, "camelot": "6A", "energy": 0.75 },
+    { "title": "Suavemente", "artist": "Elvis Crespo", "genre": "merengue", "bpm": 91, "camelot": "6A", "energy": 0.85 },
+    { "title": "Vivir Bailando", "artist": "Enrique Iglesias & Descemer Bueno", "genre": "salsa", "bpm": 94, "camelot": "9A", "energy": 0.7 },
+    { "title": "Bailando", "artist": "Enrique Iglesias", "genre": "comercial latino", "bpm": 92, "camelot": "6A", "energy": 0.78 },
+    { "title": "TACTO QUE LLEGÓ EL REPARTO", "artist": "Bebeshito", "genre": "reparto", "bpm": 106, "camelot": "7A", "energy": 0.9 },
+    { "title": "Reparto para el mundo", "artist": "Chocolate MC", "genre": "reparto", "bpm": 104, "camelot": "5A", "energy": 0.88 },
+    { "title": "El Tucanazo", "artist": "El Chulo", "genre": "reparto", "bpm": 100, "camelot": "8B", "energy": 0.86 },
+    { "title": "PROVENZA", "artist": "Karol G", "genre": "reggaeton", "bpm": 111, "camelot": "3A", "energy": 0.72 },
+    { "title": "Ella Baila Sola", "artist": "Eslabon Armado & Peso Pluma", "genre": "corridos", "bpm": 148, "camelot": "11B", "energy": 0.7 },
+    { "title": "TQG", "artist": "Karol G & Shakira", "genre": "reggaeton", "bpm": 97, "camelot": "2A", "energy": 0.75 },
+    { "title": "Gasolina", "artist": "Daddy Yankee", "genre": "reggaeton", "bpm": 95, "camelot": "10A", "energy": 0.95 }
+  ]
+}

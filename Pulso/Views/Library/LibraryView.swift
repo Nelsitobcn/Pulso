@@ -128,11 +128,14 @@ struct LibraryView: View {
 
             Divider()
 
-            // Caja "Mauri-Bot": cola sugerida por IA local
-            DJAssistantBox(assistant: djAssistant) {
+            // Caja "Mauri-Bot": cola sugerida por IA local + tendencias globales
+            DJAssistantBox(assistant: djAssistant, onSearchTrending: { query in
+                youtubeQuery = query
+                searchYouTube()
+            }) {
                 let deck = audioEngine.deckA.track ?? audioEngine.deckB.track
                 guard let current = deck else { return }
-                Task { await djAssistant.suggest(current: current, library: libraryService.tracks) }
+                Task { await djAssistant.suggestHybrid(current: current, library: libraryService.tracks) }
             }
             Divider()
 
@@ -282,6 +285,8 @@ struct YouTubeResultsPanel: View {
 struct DJAssistantBox: View {
     @ObservedObject var assistant: DJAssistantService
     @EnvironmentObject var audioEngine: AudioEngine
+    /// Callback cuando el DJ pulsa "buscar en YouTube" en una sugerencia de tendencia no-local.
+    var onSearchTrending: (String) -> Void = { _ in }
     let onAsk: () -> Void
 
     var body: some View {
@@ -306,31 +311,40 @@ struct DJAssistantBox: View {
             }
 
             ForEach(Array(assistant.suggestions.enumerated()), id: \.element.id) { idx, s in
-                Button {
-                    audioEngine.load(track: s.track, into: .right)
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("\(idx + 1)")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.purple)
-                            .frame(width: 16)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.track.title)
-                                .font(.caption.bold())
-                                .lineLimit(1)
-                            Text(s.reason)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Image(systemName: "arrow.right.circle")
-                            .foregroundStyle(.tertiary)
+                let isTrending: Bool = {
+                    if case .trending = s.origin { return true }; return false
+                }()
+                HStack(spacing: 8) {
+                    Text("\(idx + 1)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(isTrending ? .orange : .purple)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.track.title).font(.caption.bold()).lineLimit(1)
+                        Text(s.reason).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 3)
+                    Spacer()
+                    // Tendencia no-local → buscar en YouTube. Local → cargar al Deck B.
+                    if case let .trending(query) = s.origin {
+                        Button {
+                            onSearchTrending(query)
+                        } label: {
+                            Label("YouTube", systemImage: "magnifyingglass")
+                                .font(.caption2)
+                        }
+                        .buttonStyle(.bordered).controlSize(.mini)
+                    } else {
+                        Button {
+                            audioEngine.load(track: s.track, into: .right)
+                        } label: {
+                            Image(systemName: "arrow.right.circle").foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Cargar al Deck B")
+                    }
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 3)
             }
         }
         .padding(.horizontal, 12)
