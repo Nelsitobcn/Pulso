@@ -71,6 +71,18 @@ final class AudioEngine: ObservableObject {
     }
     @Published var isPreviewingCue = false
     @Published var previewingTitle = ""
+    /// Reproductor de preescucha completo (auditioning tipo Rekordbox):
+    @Published var isPreviewPlaying = false          // play/pause
+    @Published var previewTime: TimeInterval = 0      // posición actual (s)
+    @Published var previewDuration: TimeInterval = 0  // duración total (s)
+    /// Track de preescucha con BPM/key analizados (se rellena en background). Sirve para mostrar
+    /// datos en el modal y para arrastrarlo/cargarlo a un deck.
+    @Published var previewTrack: Track?
+    // Base de tiempo del preview (mismo patrón que los decks).
+    private var previewPausedAt: TimeInterval = 0
+    private var previewHostTime: Double = 0
+    private var previewURL: URL?
+    private var previewTimer: AnyCancellable?
 
     // Archivo cargado por deck
     private var fileA: AVAudioFile?
@@ -732,34 +744,120 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Preescucha (cue) por canal propio
 
-    /// Reproduce un archivo de audio LOCAL por el canal de preescucha, con volumen propio,
-    /// sin mezclarse con los decks. Sustituye la preescucha vieja (AVPlayer suelto que sonaba
-    /// mezclado con todo). Pensado para escuchar un candidato antes de cargarlo a un deck.
+    /// Reproduce un archivo LOCAL por el canal de preescucha (auditioning tipo Rekordbox):
+    /// suena con volumen propio, sin mezclarse con los decks, y se puede pausar/adelantar. Además
+    /// analiza BPM/key en background para mostrarlos antes de cargar. Pensado para escuchar un
+    /// candidato (mitad, drop, final) antes de decidir cargarlo a un deck.
     func startCuePreview(url: URL, title: String) {
         stopCuePreview()
         guard let file = try? AVAudioFile(forReading: url) else { return }
         previewFile = file
-        previewPlayer.scheduleFile(file, at: nil) { [weak self] in
-            Task { @MainActor in self?.finishCuePreview() }
+        previewURL = url
+        previewDuration = Double(file.length) / file.processingFormat.sampleRate
+        previewingTitle = title
+        isPreviewingCue = true
+        // Track base con nombre; BPM/key se rellenan al analizar.
+        previewTrack = Track.from(url: url)
+        schedulePreview(fromTime: 0)
+        startPreviewTimer()
+        // Análisis previo en background (BPM/key) → se refleja en previewTrack cuando termina.
+        Task { [weak self] in
+            guard let self, var t = self.previewTrack else { return }
+            await TrackAnalyzer.shared.analyze(track: &t)
+            await MainActor.run {
+                // Solo aplica si seguimos con la misma pista en preescucha.
+                if self.previewURL == url { self.previewTrack = t }
+            }
+        }
+    }
+
+    /// Programa el segmento de preview desde un tiempo dado y (re)arranca la reproducción.
+    private func schedulePreview(fromTime time: TimeInterval) {
+        guard let file = previewFile else { return }
+        let sr = file.processingFormat.sampleRate
+        let startFrame = AVAudioFramePosition(max(0, min(time, previewDuration)) * sr)
+        let framesToPlay = AVAudioFrameCount(max(0, file.length - startFrame))
+        guard framesToPlay > 0 else { finishCuePreview(); return }
+        previewPlayer.stop()
+        previewPlayer.scheduleSegment(file, startingFrame: startFrame, frameCount: framesToPlay,
+                                      at: nil) { [weak self] in
+            Task { @MainActor in self?.previewSegmentFinished() }
         }
         if !engine.isRunning { try? engine.start() }
         previewPlayer.play()
-        isPreviewingCue = true
-        previewingTitle = title
+        previewPausedAt = time
+        previewHostTime = CACurrentMediaTime()
+        previewTime = time
+        isPreviewPlaying = true
     }
 
-    /// Detiene la preescucha del canal de cue.
+    /// Play/pause de la preescucha.
+    func togglePreviewPlay() {
+        guard isPreviewingCue else { return }
+        if isPreviewPlaying {
+            previewPausedAt = currentPreviewTime()
+            previewPlayer.pause()
+            isPreviewPlaying = false
+        } else {
+            previewPlayer.play()
+            previewHostTime = CACurrentMediaTime()
+            isPreviewPlaying = true
+        }
+    }
+
+    /// Adelanta/retrocede la preescucha a un tiempo dado (scrub / saltos 25-50-75%).
+    func seekCuePreview(to time: TimeInterval) {
+        guard isPreviewingCue else { return }
+        let wasPlaying = isPreviewPlaying
+        schedulePreview(fromTime: max(0, min(time, previewDuration)))
+        if !wasPlaying { previewPlayer.pause(); isPreviewPlaying = false }
+    }
+
+    /// Detiene la preescucha del canal de cue y limpia el estado.
     func stopCuePreview() {
         if previewPlayer.isPlaying { previewPlayer.stop() }
+        previewTimer?.cancel(); previewTimer = nil
         previewFile = nil
+        previewURL = nil
+        previewTrack = nil
         isPreviewingCue = false
+        isPreviewPlaying = false
         previewingTitle = ""
+        previewTime = 0
+        previewDuration = 0
     }
 
-    /// Callback al terminar el archivo de preview de forma natural.
+    /// Posición actual real del preview (base de tiempo + tiempo transcurrido).
+    private func currentPreviewTime() -> TimeInterval {
+        guard isPreviewPlaying, previewHostTime > 0 else { return previewPausedAt }
+        return previewPausedAt + (CACurrentMediaTime() - previewHostTime)
+    }
+
+    private func startPreviewTimer() {
+        previewTimer?.cancel()
+        previewTimer = Timer.publish(every: 0.05, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isPreviewingCue else { return }
+                if self.isPreviewPlaying {
+                    self.previewTime = min(self.currentPreviewTime(), self.previewDuration)
+                }
+            }
+    }
+
+    /// El segmento programado llegó al final del archivo.
+    private func previewSegmentFinished() {
+        // Si de verdad llegamos al final (no fue un stop por seek), marcamos fin.
+        if previewTime >= previewDuration - 0.2 { finishCuePreview() }
+    }
+
+    /// Fin natural de la preescucha (llegó al final del archivo). Deja el estado listo para
+    /// re-escuchar desde el inicio con play, sin cerrar el modal.
     private func finishCuePreview() {
-        isPreviewingCue = false
-        previewingTitle = ""
+        previewPlayer.stop()
+        isPreviewPlaying = false
+        previewPausedAt = 0
+        previewTime = 0
     }
 
     /// Borde de un loop para el ajuste fino.

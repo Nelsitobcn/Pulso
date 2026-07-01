@@ -60,20 +60,6 @@ struct LibraryView: View {
                     }
                 }
 
-                // Canal de preescucha activo (cue) — con su volumen independiente.
-                if audioEngine.isPreviewingCue {
-                    HStack(spacing: 8) {
-                        Image(systemName: "headphones").foregroundStyle(.green)
-                        Text("Preescucha: \(audioEngine.previewingTitle)")
-                            .font(.caption).lineLimit(1)
-                        Image(systemName: "speaker.wave.1.fill").font(.caption2).foregroundStyle(.secondary)
-                        Slider(value: $audioEngine.previewVolume, in: 0...1)
-                            .controlSize(.mini).frame(width: 80)
-                        Button("Detener") { audioEngine.stopCuePreview() }
-                            .controlSize(.mini)
-                    }
-                }
-
                 // NOTA: la lista de resultados NO va aquí en el flujo (empujaría el layout y
                 // taparía los controles de los decks). Se muestra como overlay flotante — ver
                 // `.overlay` al final del body. Así NUNCA altera la escala ni tapa el Play/CUE.
@@ -209,6 +195,12 @@ struct YouTubeResultsPanel: View {
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
 
+            // Reproductor de preescucha (auditioning): play/pause, adelantar, BPM/key, arrastrar.
+            if audioEngine.isPreviewingCue {
+                CuePreviewPlayer()
+                    .padding(.horizontal, 8).padding(.bottom, 4)
+            }
+
             if let errorText {
                 Text(errorText).font(.caption2).foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8)
@@ -269,6 +261,110 @@ struct YouTubeResultsPanel: View {
                 let imported = await libraryService.importTracks(urls: [url])
                 if let track = imported.first { audioEngine.load(track: track, into: deck) }
             } catch { errorText = error.localizedDescription }
+        }
+    }
+}
+
+/// Reproductor de preescucha (auditioning tipo Rekordbox): play/pause, barra de progreso
+/// arrastrable para adelantar (oír mitad/final), saltos rápidos 25/50/75%, BPM/key analizados
+/// en background, volumen, y arrastrar / cargar la pista a un deck.
+struct CuePreviewPlayer: View {
+    @EnvironmentObject var audioEngine: AudioEngine
+    @EnvironmentObject var libraryService: LibraryService
+    @State private var scrubbing = false
+    @State private var scrubValue: Double = 0
+
+    private func fmt(_ t: TimeInterval) -> String {
+        guard t.isFinite, t >= 0 else { return "0:00" }
+        return String(format: "%d:%02d", Int(t) / 60, Int(t) % 60)
+    }
+
+    var body: some View {
+        let dur = max(0.01, audioEngine.previewDuration)
+        let pos = scrubbing ? scrubValue : audioEngine.previewTime
+
+        VStack(spacing: 5) {
+            // Título + BPM/key analizados
+            HStack(spacing: 6) {
+                Image(systemName: "headphones").foregroundStyle(.green).font(.caption)
+                Text(audioEngine.previewingTitle).font(.caption.bold()).lineLimit(1)
+                Spacer()
+                if let t = audioEngine.previewTrack {
+                    if let bpm = t.bpm {
+                        Text("\(Int(bpm)) BPM").font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    if let k = t.key {
+                        Text(k.rawValue).font(.system(size: 9, weight: .bold)).foregroundStyle(.orange)
+                    }
+                    if t.bpm == nil {
+                        ProgressView().controlSize(.mini)   // analizando…
+                    }
+                }
+            }
+
+            // Barra de progreso arrastrable (adelantar/scrub)
+            HStack(spacing: 6) {
+                Text(fmt(pos)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+                Slider(value: Binding(
+                    get: { pos },
+                    set: { scrubValue = $0 }
+                ), in: 0...dur, onEditingChanged: { editing in
+                    scrubbing = editing
+                    if !editing { audioEngine.seekCuePreview(to: scrubValue) }
+                })
+                .controlSize(.mini)
+                Text(fmt(dur)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
+            }
+
+            HStack(spacing: 8) {
+                // Play / Pause
+                Button { audioEngine.togglePreviewPlay() } label: {
+                    Image(systemName: audioEngine.isPreviewPlaying ? "pause.fill" : "play.fill")
+                        .frame(width: 30, height: 22)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+
+                // Saltos rápidos para oír partes clave
+                ForEach([(0.25, "¼"), (0.5, "½"), (0.75, "¾")], id: \.0) { frac, label in
+                    Button(label) { audioEngine.seekCuePreview(to: dur * frac) }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .help("Saltar al \(Int(frac*100))%")
+                }
+
+                Image(systemName: "speaker.wave.1.fill").font(.caption2).foregroundStyle(.secondary)
+                Slider(value: $audioEngine.previewVolume, in: 0...1).controlSize(.mini).frame(width: 60)
+
+                Spacer()
+
+                // Cargar la pista de preescucha a un deck (ya está en caché → instantáneo)
+                Button("→A") { loadPreview(.left) }
+                    .buttonStyle(.bordered).controlSize(.small).help("Cargar al Deck A")
+                Button("→B") { loadPreview(.right) }
+                    .buttonStyle(.bordered).controlSize(.small).help("Cargar al Deck B")
+                Button { audioEngine.stopCuePreview() } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.bordered).controlSize(.small).help("Cerrar preescucha")
+            }
+        }
+        .padding(8)
+        .background(Color.green.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        // Arrastrar la pista de preescucha directamente a un deck. Se arrastra la URL del
+        // archivo (ya descargado): el onDrop del deck la importa y carga (ver DeckView).
+        .onDrag {
+            if let url = audioEngine.previewTrack?.url {
+                return NSItemProvider(object: url as NSURL)
+            }
+            return NSItemProvider()
+        }
+    }
+
+    private func loadPreview(_ deck: DeckID) {
+        guard let url = audioEngine.previewTrack?.url else { return }
+        audioEngine.stopCuePreview()
+        Task {
+            let imported = await libraryService.importTracks(urls: [url])
+            if let track = imported.first { audioEngine.load(track: track, into: deck) }
         }
     }
 }
