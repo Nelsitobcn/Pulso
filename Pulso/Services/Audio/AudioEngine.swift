@@ -424,6 +424,36 @@ final class AudioEngine: ObservableObject {
     private var phaseLockTimer: AnyCancellable?
     private var phaseLockSlave: DeckID?
 
+    /// Fase de reproducción respecto al BEATGRID REAL (no contra t=0).
+    /// `fileTime` es la posición actual en tiempo de archivo (segundos). Devuelve:
+    ///  - `phase`: fracción [0,1) recorrida entre el beat anterior y el siguiente del grid.
+    ///  - `barPhase`: fracción [0,1) recorrida dentro del COMPÁS (si hay downbeat fiable),
+    ///     para no engancharse a contratiempo. `nil` si no hay downbeat.
+    /// Devuelve `nil` completo si el grid no sirve (sin beats / fuera de rango).
+    private func gridPhase(beats: [Double], downbeatIndex: Int?, beatsPerBar: Int,
+                           at fileTime: Double) -> (phase: Double, barPhase: Double?)? {
+        guard beats.count >= 2 else { return nil }
+        // Localiza el beat inmediatamente anterior a fileTime (búsqueda binaria).
+        var lo = 0, hi = beats.count - 1
+        if fileTime <= beats[0] || fileTime >= beats[hi] { return nil } // fuera del grid analizado
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2
+            if beats[mid] <= fileTime { lo = mid } else { hi = mid }
+        }
+        // lo = índice del beat previo, hi = lo+1 (beat siguiente).
+        let interval = beats[hi] - beats[lo]
+        guard interval > 0 else { return nil }
+        let phase = (fileTime - beats[lo]) / interval   // [0,1) dentro del beat
+
+        var barPhase: Double? = nil
+        if let db = downbeatIndex, beatsPerBar > 0 {
+            // Posición del beat previo dentro del compás (0…beatsPerBar-1), medido desde el "1".
+            let beatInBar = ((lo - db) % beatsPerBar + beatsPerBar) % beatsPerBar
+            barPhase = (Double(beatInBar) + phase) / Double(beatsPerBar)  // [0,1) dentro del compás
+        }
+        return (phase, barPhase)
+    }
+
     /// Arranca un bucle que cada 100ms mide el desfase de beat entre master y slave y empuja
     /// suavemente el rate del slave (nudge ±) hasta que los bombos coinciden. Es un controlador
     /// proporcional simple. Se detiene si algún deck para o se vuelve a sincronizar.
@@ -432,17 +462,21 @@ final class AudioEngine: ObservableObject {
         phaseLockSlave = slave
         let master: DeckID = slave == .left ? .right : .left
         let slavePitch = slave == .left ? pitchA : pitchB
-        let slavePlayer = slave == .left ? playerA : playerB
-        let masterPlayer = master == .left ? playerA : playerB
 
-        guard let masterBPM = (master == .left ? deckA : deckB).track?.bpm,
-              let slaveBPM  = (slave  == .left ? deckA : deckB).track?.bpm,
+        let masterDeck = master == .left ? deckA : deckB
+        let slaveDeck  = slave  == .left ? deckA : deckB
+        guard let masterBPM = masterDeck.track?.bpm,
+              let slaveBPM  = slaveDeck.track?.bpm,
               masterBPM > 0, slaveBPM > 0 else { return }
-        let masterTempo = (master == .left ? deckA : deckB).tempo
-        // beat efectivo del master, en su tiempo de archivo (lo que reporta playerOutputTime).
+
+        // Beatgrids reales (fuente de verdad de fase). Si faltan → fallback contra t=0.
+        let masterGrid = masterDeck.track?.beatGrid
+        let slaveGrid  = slaveDeck.track?.beatGrid
+        let masterTempo = masterDeck.tempo
+
+        // Fallback (sin grid usable): beat abstracto desde t=0, como antes.
         let beatMasterFile = 60.0 / (masterBPM * masterTempo)
-        // beat del slave en SU tiempo de archivo (sin rate; el rate lo aplica el nodo).
-        let beatSlaveFile = 60.0 / slaveBPM
+        let beatSlaveFile  = 60.0 / slaveBPM
 
         phaseLockTimer = Timer.publish(every: 0.1, on: .main, in: .common)
             .autoconnect()
@@ -451,24 +485,71 @@ final class AudioEngine: ObservableObject {
                 let s = slave == .left ? self.deckA : self.deckB
                 let m = master == .left ? self.deckA : self.deckB
                 guard s.isPlaying, m.isPlaying else { self.stopPhaseLock(); return }
-                guard let mTime = self.playerOutputTime(masterPlayer),
-                      let sTime = self.playerOutputTime(slavePlayer) else { return }
 
-                // Fase de cada uno dentro de su beat, normalizada a [0,1).
-                let phaseM = (mTime.truncatingRemainder(dividingBy: beatMasterFile)) / beatMasterFile
-                let phaseS = (sTime.truncatingRemainder(dividingBy: beatSlaveFile)) / beatSlaveFile
-                var err = phaseM - phaseS                 // error de fase en fracción de beat
+                // Posición en TIEMPO DE ARCHIVO de cada deck (donde viven los beats del grid).
+                let mFile = self.currentAudioTime(deck: master)
+                let sFile = self.currentAudioTime(deck: slave)
+
+                // Fase de master y slave. Preferimos la fase del beatgrid real; si el grid no
+                // cubre esta posición (intro/outro fuera de rango) caemos al beat abstracto.
+                let mp = masterGrid.flatMap {
+                    self.gridPhase(beats: $0.beats, downbeatIndex: $0.downbeatIndex,
+                                   beatsPerBar: $0.beatsPerBar, at: mFile)
+                }
+                let sp = slaveGrid.flatMap {
+                    self.gridPhase(beats: $0.beats, downbeatIndex: $0.downbeatIndex,
+                                   beatsPerBar: $0.beatsPerBar, at: sFile)
+                }
+
+                let phaseM: Double
+                let phaseS: Double
+                if let mp, let sp {
+                    // Ambos con grid: si los DOS tienen downbeat, alineamos por COMPÁS (evita
+                    // enganche a contratiempo). Si no, beat-a-beat.
+                    if let mBar = mp.barPhase, let sBar = sp.barPhase {
+                        phaseM = mBar; phaseS = sBar
+                    } else {
+                        phaseM = mp.phase; phaseS = sp.phase
+                    }
+                } else {
+                    // Fallback: beat abstracto desde t=0 (mismo comportamiento previo).
+                    phaseM = mFile.truncatingRemainder(dividingBy: beatMasterFile) / beatMasterFile
+                    phaseS = sFile.truncatingRemainder(dividingBy: beatSlaveFile) / beatSlaveFile
+                }
+
+                var err = phaseM - phaseS                 // error de fase, fracción de beat/compás
                 if err > 0.5 { err -= 1 }                 // distancia circular más corta
                 if err < -0.5 { err += 1 }
 
-                // Nudge adaptativo: como NO hacemos seek (para no saltar de posición), el
-                // phase-lock engancha todo el desfase por sí solo. El cap ±8% saturaba y tardaba
-                // ~10s en converger; con cap ±25% corrige el grueso en 1-2s. Cuando el error es
-                // pequeño, err*2.0 ya da valores pequeños → suaviza solo (sin oscilar).
+                // Controlador proporcional con nudge del rate (sin seek → sin saltos audibles).
                 // Si el slave va atrasado (err>0) acelera; si adelantado, frena.
-                let nudge = max(-0.25, min(0.25, err * 2.0))
+                //
+                // Escala del error: cuando alineamos por COMPÁS (barPhase, ÷beatsPerBar) el mismo
+                // desfase físico da un `err` beatsPerBar veces menor que beat-a-beat. Escalamos la
+                // ganancia para que la respuesta del controlador sea la misma en ambos modos
+                // (si no, en modo compás convergería ~4x más lento).
+                let usingBar = (mp?.barPhase != nil && sp?.barPhase != nil)
+                let gain = usingBar ? 2.0 * Double(slaveDeck.track?.beatGrid?.beatsPerBar ?? 4) : 2.0
+                let nudge = max(-0.25, min(0.25, err * gain))
                 let newRate = baseRate * (1.0 + nudge)
                 slavePitch.rate = Float(max(0.01, newRate))
+
+                // FIX crítico (feedback de tiempo): el nudge cambió el rate REAL del nodo, pero
+                // currentAudioTime(slave) calcula la posición con playTempo. Si no lo re-anclamos,
+                // el próximo tick mide la fase del slave sobre una posición de archivo MENTIROSA
+                // → el lazo oscila en vez de converger. Congelamos la posición actual (con el
+                // tempo viejo, ya integrado por currentAudioTime hasta ahora) y reiniciamos la
+                // base de tiempo con el rate nuevo.
+                let frozen = sFile
+                if slave == .left {
+                    self.pausedAtA = frozen
+                    self.playHostTimeA = CACurrentMediaTime()
+                    self.playTempoA = newRate
+                } else {
+                    self.pausedAtB = frozen
+                    self.playHostTimeB = CACurrentMediaTime()
+                    self.playTempoB = newRate
+                }
             }
     }
 
@@ -483,7 +564,18 @@ final class AudioEngine: ObservableObject {
         if restoreBaseRate, let s = phaseLockSlave {
             let pitch = s == .left ? pitchA : pitchB
             let deckState = s == .left ? deckA : deckB
-            pitch.rate = Float(max(0.01, deckState.tempo))
+            let baseTempo = max(0.01, deckState.tempo)
+            pitch.rate = Float(baseTempo)
+            // Re-anclar el estado de tiempo con el tempo base: el timer lo dejó en el último
+            // rate con nudge, así que currentAudioTime mentiría si no lo reseteamos aquí.
+            if deckState.isPlaying {
+                let frozen = currentAudioTime(deck: s)
+                if s == .left {
+                    pausedAtA = frozen; playHostTimeA = CACurrentMediaTime(); playTempoA = baseTempo
+                } else {
+                    pausedAtB = frozen; playHostTimeB = CACurrentMediaTime(); playTempoB = baseTempo
+                }
+            }
         }
         phaseLockSlave = nil
     }
