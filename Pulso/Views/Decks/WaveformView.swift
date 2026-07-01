@@ -43,6 +43,33 @@ struct WaveformView: View {
                     .offset(x: geo.size.width * deck.progress - 1)
 
                 if let dur = deck.track?.duration, dur > 0 {
+                    // Marcas de beat + downbeat del beatgrid (feedback para "Set Downbeat")
+                    if let grid = deck.track?.beatGrid, !grid.beats.isEmpty {
+                        Canvas { ctx, size in
+                            let dbIndex = grid.downbeatIndex
+                            let bpb = max(1, grid.beatsPerBar)
+                            for (i, beat) in grid.beats.enumerated() {
+                                let x = size.width * CGFloat(beat / dur)
+                                // Downbeat resuelto: destaca el "1" y cada compás desde él
+                                let isBar: Bool
+                                if let db = dbIndex {
+                                    isBar = (i - db) % bpb == 0
+                                } else {
+                                    isBar = false
+                                }
+                                let w: CGFloat = isBar ? 2 : 1
+                                let color: Color = isBar
+                                    ? .white.opacity(0.55)
+                                    : .white.opacity(0.14)
+                                ctx.fill(
+                                    Path(CGRect(x: x - w / 2, y: 0, width: w, height: size.height)),
+                                    with: .color(color)
+                                )
+                            }
+                        }
+                        .allowsHitTesting(false)
+                    }
+
                     ForEach(deck.hotCues) { cue in
                         cue.color.swiftUIColor
                             .frame(width: 3)

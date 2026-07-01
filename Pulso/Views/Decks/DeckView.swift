@@ -26,6 +26,9 @@ struct DeckView: View {
 
             HotCuePadsView(deck: deck)
 
+            // Beatgrid: fijar el "1" a mano cuando la heurística falla (salsa/funk)
+            DownbeatControlView(deck: deck)
+
             // Plato giratorio (visual)
             TurntableView(isSpinning: deck.isPlaying)
                 .frame(width: 140, height: 140)
@@ -169,6 +172,80 @@ struct DeckHeaderView: View {
                 .font(.subheadline)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+}
+
+/// Control del downbeat ("1" del compás). El beatgrid lo detecta por heurística
+/// sub-bass, que falla en salsa/funk → devuelve `nil`. Aquí el DJ pone el playhead
+/// en el "1" real y lo fija a mano; se persiste en la biblioteca y alimenta el SYNC.
+struct DownbeatControlView: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+    @EnvironmentObject var libraryService: LibraryService
+
+    private var grid: BeatGrid? { deck.track?.beatGrid }
+
+    private var statusLabel: String {
+        guard let grid else { return "sin analizar" }
+        if grid.beats.isEmpty { return "sin beats" }
+        if grid.firstDownbeat != nil {
+            return grid.confidence >= 1.0 ? "fijado a mano" : "auto"
+        }
+        return "sin 1"
+    }
+
+    private var statusColor: Color {
+        guard let grid, !grid.beats.isEmpty else { return .secondary }
+        if grid.firstDownbeat == nil { return .orange }
+        return grid.confidence >= 1.0 ? .green : .yellow
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Fijar el downbeat en la posición actual del playhead
+            Button {
+                guard let track = deck.track else { return }
+                if let updated = libraryService.setDownbeat(trackID: track.id,
+                                                            atTime: deck.currentTime) {
+                    deck.track = updated  // refresco inmediato del waveform
+                }
+            } label: {
+                Label("SET 1", systemImage: "1.circle.fill")
+                    .font(.caption.bold())
+                    .frame(height: 28)
+                    .padding(.horizontal, 8)
+                    .background(Color.white.opacity(0.1))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(grid?.beats.isEmpty ?? true)
+            .help("Fijar el \"1\" del compás en la posición actual del playhead")
+
+            // Saltar al downbeat fijado
+            Button {
+                guard let db = grid?.firstDownbeat else { return }
+                audioEngine.seek(to: db, deck: deck.id)
+            } label: {
+                Image(systemName: "backward.end.fill")
+                    .font(.caption)
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.1))
+                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(grid?.firstDownbeat == nil)
+            .help("Saltar al \"1\" fijado")
+
+            Spacer()
+
+            // Estado del downbeat
+            Text(statusLabel)
+                .font(.caption2)
+                .foregroundStyle(statusColor)
+                .monospacedDigit()
         }
     }
 }

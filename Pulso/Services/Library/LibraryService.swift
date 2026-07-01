@@ -173,6 +173,20 @@ final class LibraryService: ObservableObject {
         return track
     }
 
+    // MARK: - Edición del beatgrid (UI "Set Downbeat Here")
+
+    /// Fija el downbeat del track al beat más cercano a `time` (segundos) y persiste.
+    /// Devuelve el track actualizado (para refrescar el deck de inmediato) o `nil`
+    /// si el track no está en la biblioteca o no tiene beatgrid analizado.
+    @discardableResult
+    func setDownbeat(trackID: UUID, atTime time: TimeInterval) -> Track? {
+        guard let idx = tracks.firstIndex(where: { $0.id == trackID }),
+              let grid = tracks[idx].beatGrid else { return nil }
+        tracks[idx].beatGrid = grid.settingDownbeat(nearestTo: time)
+        saveToDisk()
+        return tracks[idx]
+    }
+
     // MARK: - Persistencia local (JSON en Application Support)
 
     private var storageURL: URL {

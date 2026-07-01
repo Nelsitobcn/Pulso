@@ -39,6 +39,30 @@ struct BeatGrid: Codable, Equatable {
         guard let i = downbeatIndex, beats.indices.contains(i) else { return nil }
         return beats[i]
     }
+
+    /// Índice del beat más cercano al tiempo dado (segundos). `nil` si no hay beats.
+    /// Lo usa la UI "Set Downbeat Here": el DJ pone el playhead en el "1" y fijamos
+    /// el downbeat al beat detectado más próximo (no al tiempo exacto del clic).
+    func nearestBeatIndex(to time: Double) -> Int? {
+        guard !beats.isEmpty else { return nil }
+        var best = 0
+        var bestDist = abs(beats[0] - time)
+        for i in 1..<beats.count {
+            let d = abs(beats[i] - time)
+            if d < bestDist { bestDist = d; best = i }
+        }
+        return best
+    }
+
+    /// Devuelve una copia con el downbeat fijado al beat más cercano a `time`.
+    /// Sube la confianza a 1.0 porque es un ajuste manual del DJ (fuente de verdad).
+    func settingDownbeat(nearestTo time: Double) -> BeatGrid {
+        guard let i = nearestBeatIndex(to: time) else { return self }
+        var copy = self
+        copy.downbeatIndex = i
+        copy.confidence = 1.0
+        return copy
+    }
 }
 
 struct Track: Identifiable, Codable, Equatable {
