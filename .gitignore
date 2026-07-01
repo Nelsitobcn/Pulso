@@ -61,3 +61,6 @@ node_modules/
 
 # Claude Code (sesión local, no versionar)
 .claude/
+
+# Render de trabajo del logo (regenerable desde design/pulso-icon.svg)
+design/pulso-1024.png

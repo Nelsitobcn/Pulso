@@ -1,0 +1,67 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Fondo oscuro con degradado radial sutil -->
+    <radialGradient id="bg" cx="38%" cy="30%" r="85%">
+      <stop offset="0%" stop-color="#1E2230"/>
+      <stop offset="55%" stop-color="#141722"/>
+      <stop offset="100%" stop-color="#0B0D14"/>
+    </radialGradient>
+    <!-- Degradado de acento para la onda: cyan -> magenta -->
+    <linearGradient id="accent" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#22D3EE"/>
+      <stop offset="50%" stop-color="#6D5EF6"/>
+      <stop offset="100%" stop-color="#F63AC0"/>
+    </linearGradient>
+    <linearGradient id="pFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F4F6FF"/>
+      <stop offset="100%" stop-color="#AEB6D8"/>
+    </linearGradient>
+    <!-- Glow para la onda -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Placa con esquinas redondeadas (macOS/iOS la enmascara igual, pero así se ve bien standalone) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)"/>
+
+  <!-- P estilizada como PATH RELLENO (lee mucho más nítida que stroke).
+       Asta vertical gruesa a la izquierda + bucle superior tipo counter. -->
+  <path fill="url(#pFill)" fill-rule="evenodd" d="
+    M 336 206
+    L 428 206
+    L 428 818
+    A 46 46 0 0 1 336 818
+    Z
+    M 428 206
+    L 556 206
+    A 172 172 0 0 1 556 550
+    L 428 550
+    L 428 458
+    L 556 458
+    A 80 80 0 0 0 556 298
+    L 428 298
+    Z
+  "/>
+
+  <!-- Onda de pulso / latido (ECG) cruzando la parte baja, con glow.
+       Colocada BAJO el bucle para no romper la lectura de la P. -->
+  <path d="M 150 648
+           L 372 648
+           L 438 648
+           L 492 512
+           L 572 812
+           L 636 604
+           L 690 648
+           L 880 648"
+        fill="none"
+        stroke="url(#accent)"
+        stroke-width="44"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        filter="url(#glow)"/>
+</svg>
