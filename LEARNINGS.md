@@ -80,3 +80,10 @@
 ### [2026-06-24] — Verificar UI sin poder clicar: auto-test gated por env var
 **Aprendizaje**: automatizar clics en la app (cliclick/AppleScript por coordenadas) es frágil y falla a menudo. Para verificar un flujo de UI de verdad sin clicar, usar un hook de auto-test bajo `#if DEBUG` disparado por variable de entorno (ej. `PULSO_YT_TEST=1`) que ejercita el código real (descarga→análisis→deck→play) y deja evidencia (NSLog + archivos + estado observable por captura).
 **Files**: `Pulso/App/PulsoApp.swift`
+
+### [2026-07-01] — `vDSP_conv` para autocorrelación desbordaba el buffer de salida
+**Bug**: en `BeatGridAnalyzer.estimateBeatPeriod`, la autocorrelación se hacía con `vDSP_conv(env, env, &autocorr, resultLen=count, filterLen=count)` sobre un buffer `autocorr` de tamaño `count`. Una convolución "full" de dos señales de longitud N produce `2N-1` muestras → vDSP escribía fuera de los límites del array = corrupción de memoria silenciosa (el test pasaba por suerte, el BPM salía bien).
+**Cómo se diagnosticó**: lo cazó el Verifier adversarial Fugu (`~/bin/fugu_seal.sh`) al sellar el diff; insistió dos rondas hasta reescribirlo.
+**Fix**: eliminado `vDSP_conv`. Autocorrelación calculada lag-a-lag con `vDSP_dotpr` en un bucle `for lag in 0...maxLag` → `autocorr[lag] = Σ env[n]·env[n+lag]`. Solo computa los lags del rango plausible (50–210 BPM) y se indexa exactamente en `[0, maxLag]` → imposible desbordar, y más barato (no calcula lags que no se usan).
+**Regla**: `vDSP_conv`/`vDSP_corr` producen `resultLen` muestras pero LEEN hasta `resultLen + filterLen - 1` del primer operando; el buffer de salida y el padding del input deben dimensionarse para eso. Si solo necesitas unos pocos lags de una autocorrelación, `vDSP_dotpr` por lag es más seguro y a menudo más rápido que una convolución full.
+**Files**: `Pulso/Services/Audio/BeatGridAnalyzer.swift`
