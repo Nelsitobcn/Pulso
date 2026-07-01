@@ -17,6 +17,12 @@
 
 ---
 
+### [2026-07-01] — SYNC al beatgrid: el phase-lock se clavaba a medio beat por estado de tiempo mentiroso
+**Bug**: al conectar el phase-lock al beatgrid real (fase desde `beatGrid.beats` en vez de contra t=0), el lazo NO convergía: el error de fase se quedaba clavado en 0.5 (medio beat) para siempre. En vivo = beatmatch que rebota y nunca engancha.
+**Causa**: el timer del phase-lock cambia `slavePitch.rate` con el nudge (p.ej. 1.05), pero NO actualizaba `playTempo`/`playHostTime`/`pausedAt` del slave. Como `currentAudioTime(deck:)` estima la posición de archivo con `pausedAt + (now-playHostTime)*playTempo`, seguía integrando con el tempo BASE (1.0) mientras el audio real avanzaba al rate con nudge (1.05). → La posición de archivo que se usaba para consultar `gridPhase` estaba ATRASADA respecto al audio real → el lazo medía la fase sobre una posición mentirosa → feedback loop divergente que se satura a err=0.5.
+**Fix**: cada tick, tras cambiar `pitch.rate`, re-anclar el estado de tiempo del slave: congelar la posición estimada actual (`sFile`, ya integrada honestamente hasta ahora) como `pausedAt`, `playHostTime = now`, `playTempo = newRate`. Igual en `stopPhaseLock` al restaurar el rate base. Verificado con simulación del lazo: sin fix se clava en 0.5, con fix converge a 0 en ~3.1s.
+**Regla**: en un controlador de tiempo real, si cambias el rate EFECTIVO de un nodo de audio, cualquier estimador de posición que dependa de ese rate DEBE re-anclarse en el mismo instante. Un estimador de posición y el audio real son dos relojes; si uno cambia de velocidad y el otro no se entera, el lazo de control mide sobre una mentira. Cazado por review adversarial (Fugu) + simulación ejecutable del lazo — NO habría salido de "compila y el test feliz pasa".
+
 ### [2026-06-02/03] — SYNC: del align-once fallido al phase-lock continuo
 **Bug**: al pulsar SYNC los kicks no coincidían (sonaba desfasado y derivaba). Costó MUCHAS iteraciones porque varios bugs se solapaban (ver abajo).
 **Causa real (encadenada)**:
