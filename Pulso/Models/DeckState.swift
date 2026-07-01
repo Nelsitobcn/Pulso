@@ -20,6 +20,26 @@ final class DeckState: ObservableObject, Identifiable {
     @Published var keyLock: Bool = true
     @Published var hotCues: [HotCue] = []
 
+    /// Zoom de la waveform (1× = pista entera; hasta 32× para colocar el cursor en el drop).
+    @Published var waveformZoom: Double = 1.0
+    /// Centro de la ventana visible de la waveform, en fracción [0,1] de la pista.
+    /// Solo se usa cuando `waveformZoom > 1`. Se auto-sigue al playhead salvo que el usuario
+    /// haga scroll manual (lo fija hasta el próximo seek).
+    @Published var waveformCenter: Double = 0.0
+    /// Si el usuario hizo scroll manual en la onda → no auto-seguir el playhead.
+    @Published var waveformManualScroll: Bool = false
+
+    /// Rango visible [inicio, fin] en fracción [0,1] de la pista, dado el zoom y el centro.
+    /// A zoom 1× es [0,1]. A más zoom, una ventana estrecha centrada en `waveformCenter`.
+    var waveformVisibleRange: (start: Double, end: Double) {
+        let z = max(1.0, waveformZoom)
+        let win = 1.0 / z                              // ancho de la ventana visible
+        let center = waveformManualScroll ? waveformCenter : progress
+        var start = center - win / 2
+        start = min(max(0, start), 1 - win)            // clamp para no salir de la pista
+        return (start, start + win)
+    }
+
     // Stems
     @Published var stemVocalMuted: Bool = false
     @Published var stemBassMuted: Bool = false

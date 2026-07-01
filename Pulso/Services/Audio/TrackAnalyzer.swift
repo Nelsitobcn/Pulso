@@ -14,7 +14,10 @@ actor TrackAnalyzer {
 
         track.duration = await getDuration(url: url)
         track.key = detectKey(buffer: buffer, sampleRate: format.sampleRate)
-        track.waveformData = buildWaveform(buffer: buffer, targetSamples: 512)
+        // 3000 muestras (antes 512): da nitidez al hacer zoom en la waveform hasta ~16×
+        // para colocar el cursor en el drop con precisión. El coste extra de RAM/JSON por
+        // pista es despreciable (~12 KB de floats).
+        track.waveformData = buildWaveform(buffer: buffer, targetSamples: 3000)
 
         // Beatgrid + downbeat (Sesión 1, jul-2026). Sustituye al antiguo `detectBPM` de un solo
         // número: ahora calculamos el envelope de onset una vez y de ahí salen TANTO el BPM como

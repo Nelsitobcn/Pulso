@@ -17,12 +17,15 @@ struct DeckView: View {
             // Cabecera del deck
             DeckHeaderView(deck: deck)
 
-            // Waveform — tap o drag para seek
+            // Waveform — tap o drag para seek; rueda del ratón para zoom
             WaveformView(deck: deck) { progress in
                 let time = (deck.track?.duration ?? 0) * progress
                 audioEngine.seek(to: time, deck: deck.id)
             }
             .frame(height: 80)
+
+            // Slider de zoom de la waveform (además de la rueda del ratón; imprescindible en iPad)
+            WaveformZoomControl(deck: deck)
 
             HotCuePadsView(deck: deck)
 
@@ -173,6 +176,44 @@ struct DeckHeaderView: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+}
+
+/// Slider de zoom de la waveform (1×–32×). Complementa la rueda del ratón (macOS) y es la
+/// única vía de zoom en iPad. Al soltar en 1× se resetea el scroll manual.
+struct WaveformZoomControl: View {
+    @ObservedObject var deck: DeckState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "minus.magnifyingglass")
+                .font(.caption2).foregroundStyle(.tertiary)
+            Slider(value: $deck.waveformZoom, in: 1...32)
+                .controlSize(.mini)
+                .tint(Color.accentColor)
+                .onChange(of: deck.waveformZoom) { _, z in
+                    deck.waveformManualScroll = false      // al ajustar zoom, seguir el playhead
+                    if z <= 1.01 { deck.waveformManualScroll = false }
+                }
+            Image(systemName: "plus.magnifyingglass")
+                .font(.caption2).foregroundStyle(.tertiary)
+            // Reset a 1×
+            Button {
+                deck.waveformZoom = 1.0
+                deck.waveformManualScroll = false
+            } label: {
+                Text("1×").font(.caption2.bold())
+                    .frame(width: 26, height: 20)
+                    .background(Color.white.opacity(0.1))
+                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            }
+            .buttonStyle(.plain)
+            .disabled(deck.waveformZoom <= 1.01)
+            .help("Restablecer zoom")
+        }
+        .disabled(deck.track == nil)
+        .opacity(deck.track == nil ? 0.4 : 1)
     }
 }
 
