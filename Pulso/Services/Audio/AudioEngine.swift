@@ -474,6 +474,17 @@ final class AudioEngine: ObservableObject {
         return (phase, barPhase)
     }
 
+    /// Fase del beat del deck AHORA (para el Beat Match Bar del panel central).
+    /// Devuelve la fracción [0,1) recorrida dentro del beat actual según el beatgrid real, o
+    /// `nil` si no hay grid/posición usable. Reusa `gridPhase` (misma fuente que el phase-lock).
+    func deckBeatPhase(_ deck: DeckID) -> Double? {
+        let d = deck == .left ? deckA : deckB
+        guard let grid = d.track?.beatGrid, !grid.beats.isEmpty else { return nil }
+        let fileTime = currentAudioTime(deck: deck)
+        return gridPhase(beats: grid.beats, downbeatIndex: grid.downbeatIndex,
+                         beatsPerBar: grid.beatsPerBar, at: fileTime)?.phase
+    }
+
     /// Arranca un bucle que cada 100ms mide el desfase de beat entre master y slave y empuja
     /// suavemente el rate del slave (nudge ±) hasta que los bombos coinciden. Es un controlador
     /// proporcional simple. Se detiene si algún deck para o se vuelve a sincronizar.
