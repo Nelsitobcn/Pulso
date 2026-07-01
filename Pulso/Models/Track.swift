@@ -65,6 +65,28 @@ struct BeatGrid: Codable, Equatable {
     }
 }
 
+/// Waveform de alta resolución para dibujo pro (pico-a-pico + color por frecuencia).
+///
+/// Arrays PARALELOS, un valor por columna del análisis (~3000 columnas), en orden temporal
+/// desde t=0. Se guardan como arrays de Float (compacto en JSON) en vez de array de structs.
+/// La UI dibuja una línea de `min[i]` a `max[i]` por columna (estilo espejo continuo), y la
+/// colorea según la banda de frecuencia dominante (low/mid/high) → look Serato/VirtualDJ.
+struct WaveformDetail: Codable, Equatable {
+    /// Valor mínimo de la señal en la columna (rango [-1,0]). Para el dibujo pico-a-pico.
+    var mins: [Float]
+    /// Valor máximo de la señal en la columna (rango [0,1]).
+    var maxs: [Float]
+    /// Energía de graves 0…1 por columna (FFT, banda < ~250 Hz). Rojos/cálidos.
+    var low: [Float]
+    /// Energía de medios 0…1 por columna (~250 Hz – 4 kHz). Verdes.
+    var mid: [Float]
+    /// Energía de agudos 0…1 por columna (> ~4 kHz). Azules/fríos.
+    var high: [Float]
+
+    var count: Int { maxs.count }
+    var isEmpty: Bool { maxs.isEmpty }
+}
+
 struct Track: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -75,7 +97,10 @@ struct Track: Identifiable, Codable, Equatable {
     var key: MusicalKey?
     var energy: Double?       // 0.0 – 1.0
     var genre: String?
-    var waveformData: [Float]? // muestras normalizadas para dibujar waveform
+    var waveformData: [Float]? // LEGACY: miniatura de picos (solo canal L). Migrado a waveformDetail.
+    /// Waveform de alta resolución (pico-a-pico + color por banda). Fuente de verdad del dibujo.
+    /// `nil` en pistas analizadas con el formato viejo → se re-analizan al cargar.
+    var waveformDetail: WaveformDetail?
     /// Rejilla de beats + downbeat. La calcula `TrackAnalyzer`. El SYNC la usará para alinear
     /// fase real (Sesión 2). `bpm` se mantiene aparte por compatibilidad con UI/sugerencias.
     var beatGrid: BeatGrid?
@@ -92,6 +117,7 @@ struct Track: Identifiable, Codable, Equatable {
         energy: Double? = nil,
         genre: String? = nil,
         waveformData: [Float]? = nil,
+        waveformDetail: WaveformDetail? = nil,
         beatGrid: BeatGrid? = nil,
         addedAt: Date = Date()
     ) {
@@ -105,6 +131,7 @@ struct Track: Identifiable, Codable, Equatable {
         self.energy = energy
         self.genre = genre
         self.waveformData = waveformData
+        self.waveformDetail = waveformDetail
         self.beatGrid = beatGrid
         self.addedAt = addedAt
     }

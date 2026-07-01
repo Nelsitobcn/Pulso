@@ -14,10 +14,11 @@ actor TrackAnalyzer {
 
         track.duration = await getDuration(url: url)
         track.key = detectKey(buffer: buffer, sampleRate: format.sampleRate)
-        // 3000 muestras (antes 512): da nitidez al hacer zoom en la waveform hasta ~16×
-        // para colocar el cursor en el drop con precisión. El coste extra de RAM/JSON por
-        // pista es despreciable (~12 KB de floats).
-        track.waveformData = buildWaveform(buffer: buffer, targetSamples: 3000)
+        // Waveform PRO: pico-a-pico (min/max) + color por banda (FFT), mono-mix, 3000 columnas.
+        // Arregla el bug "suena pero la onda plana" (era solo canal L + baja resolución).
+        track.waveformDetail = buildWaveformDetail(buffer: buffer, sampleRate: format.sampleRate, columns: 3000)
+        // Miniatura legacy: se mantiene por si algún consumidor viejo la usa (compat).
+        track.waveformData = buildWaveform(buffer: buffer, targetSamples: 512)
 
         // Beatgrid + downbeat (Sesión 1, jul-2026). Sustituye al antiguo `detectBPM` de un solo
         // número: ahora calculamos el envelope de onset una vez y de ahí salen TANTO el BPM como
@@ -236,12 +237,13 @@ actor TrackAnalyzer {
 
     // MARK: - Waveform
 
+    /// LEGACY: miniatura de picos (solo canal L). Se mantiene por compatibilidad de datos viejos,
+    /// pero el dibujo ahora usa `buildWaveformDetail`.
     private func buildWaveform(buffer: AVAudioPCMBuffer, targetSamples: Int) -> [Float] {
         guard let channelData = buffer.floatChannelData?[0] else { return [] }
         let frameCount = Int(buffer.frameLength)
         let samplesPerBucket = max(1, frameCount / targetSamples)
         var waveform: [Float] = []
-
         for i in 0..<targetSamples {
             let start = i * samplesPerBucket
             let end = min(start + samplesPerBucket, frameCount)
@@ -251,6 +253,127 @@ actor TrackAnalyzer {
             waveform.append(peak)
         }
         return waveform
+    }
+
+    /// Waveform PRO de alta resolución: mono-mix (L+R), pico-a-pico (min/max) por columna, y
+    /// energía por banda (low/mid/high) vía FFT → color estilo Serato/VirtualDJ.
+    ///
+    /// Correcciones sobre el generador viejo (bug "suena pero la onda está plana"):
+    /// - MONO-MIX (L+R)/2, no solo canal L → intros paneadas a la derecha ya no salen planas.
+    /// - Cubre TODO el buffer sin truncar frames (el bucket final absorbe el resto).
+    /// - min y max reales (no solo magnitud) → dibujo pico-a-pico simétrico, definido.
+    private func buildWaveformDetail(buffer: AVAudioPCMBuffer, sampleRate: Double,
+                                     columns: Int) -> WaveformDetail {
+        let frameCount = Int(buffer.frameLength)
+        guard frameCount > 0, let chans = buffer.floatChannelData else {
+            return WaveformDetail(mins: [], maxs: [], low: [], mid: [], high: [])
+        }
+        let channelCount = Int(buffer.format.channelCount)
+
+        // 1) Mono-mix en un solo array contiguo (L+R)/2. Un tema puede tener la energía en R.
+        var mono = [Float](repeating: 0, count: frameCount)
+        if channelCount >= 2 {
+            vDSP_vadd(chans[0], 1, chans[1], 1, &mono, 1, vDSP_Length(frameCount))
+            var half: Float = 0.5
+            vDSP_vsmul(mono, 1, &half, &mono, 1, vDSP_Length(frameCount))
+        } else {
+            mono = Array(UnsafeBufferPointer(start: chans[0], count: frameCount))
+        }
+
+        // 2) Pico-a-pico (min/max) por columna. El último bucket absorbe el resto (sin truncar).
+        let cols = max(1, columns)
+        let per = Double(frameCount) / Double(cols)
+        var mins = [Float](repeating: 0, count: cols)
+        var maxs = [Float](repeating: 0, count: cols)
+        mono.withUnsafeBufferPointer { ptr in
+            let base = ptr.baseAddress!
+            for c in 0..<cols {
+                let start = Int(Double(c) * per)
+                let end = (c == cols - 1) ? frameCount : min(frameCount, Int(Double(c + 1) * per))
+                let n = max(1, end - start)
+                var mn: Float = 0, mx: Float = 0
+                vDSP_minv(base + start, 1, &mn, vDSP_Length(n))
+                vDSP_maxv(base + start, 1, &mx, vDSP_Length(n))
+                mins[c] = mn; maxs[c] = mx
+            }
+        }
+
+        // 3) Energía por banda (low/mid/high) con FFT por columna → color.
+        let (low, mid, high) = bandEnergies(mono: mono, sampleRate: sampleRate, columns: cols)
+
+        return WaveformDetail(mins: mins, maxs: maxs, low: low, mid: mid, high: high)
+    }
+
+    /// Energía por banda (graves/medios/agudos) por columna, normalizada 0…1.
+    /// FFT de una ventana por columna; suma la potencia en cada banda de frecuencia.
+    private func bandEnergies(mono: [Float], sampleRate: Double, columns: Int)
+        -> (low: [Float], mid: [Float], high: [Float]) {
+        let n = mono.count
+        var low = [Float](repeating: 0, count: columns)
+        var mid = [Float](repeating: 0, count: columns)
+        var high = [Float](repeating: 0, count: columns)
+        guard n > 0 else { return (low, mid, high) }
+
+        // FFT de 1024 puntos por columna (potencia de 2). Suficiente para separar 3 bandas.
+        let log2n = vDSP_Length(10)          // 2^10 = 1024
+        let fftLen = 1 << 10
+        guard let setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            return (low, mid, high)
+        }
+        defer { vDSP_destroy_fftsetup(setup) }
+
+        let per = Double(n) / Double(columns)
+        // Límites de banda en bins de la FFT.
+        let binHz = sampleRate / Double(fftLen)
+        let lowMaxBin = Int(250.0 / binHz)               // < 250 Hz = graves
+        let midMaxBin = Int(4000.0 / binHz)              // 250 Hz – 4 kHz = medios
+        let nyquistBin = fftLen / 2
+
+        var window = [Float](repeating: 0, count: fftLen)
+        vDSP_hann_window(&window, vDSP_Length(fftLen), Int32(vDSP_HANN_NORM))
+
+        var realp = [Float](repeating: 0, count: fftLen / 2)
+        var imagp = [Float](repeating: 0, count: fftLen / 2)
+        var maxLow: Float = 1e-9, maxMid: Float = 1e-9, maxHigh: Float = 1e-9
+
+        for c in 0..<columns {
+            let center = Int(Double(c) * per + per / 2)
+            let start = max(0, min(n - fftLen, center - fftLen / 2))
+            var windowed = [Float](repeating: 0, count: fftLen)
+            let avail = min(fftLen, n - start)
+            if avail > 0 {
+                vDSP_vmul(Array(mono[start..<start+avail]), 1, window, 1, &windowed, 1, vDSP_Length(avail))
+            }
+            var lo: Float = 0, md: Float = 0, hi: Float = 0
+            realp.withUnsafeMutableBufferPointer { rp in
+                imagp.withUnsafeMutableBufferPointer { ip in
+                    var split = DSPSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
+                    windowed.withUnsafeBufferPointer { wp in
+                        wp.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: fftLen / 2) { cp in
+                            vDSP_ctoz(cp, 2, &split, 1, vDSP_Length(fftLen / 2))
+                        }
+                    }
+                    vDSP_fft_zrip(setup, &split, 1, log2n, FFTDirection(FFT_FORWARD))
+                    var mags = [Float](repeating: 0, count: fftLen / 2)
+                    vDSP_zvabs(&split, 1, &mags, 1, vDSP_Length(fftLen / 2))
+                    // Sumar magnitud por banda (bin 0 = DC, se ignora).
+                    for b in 1..<nyquistBin {
+                        let m = mags[b]
+                        if b <= lowMaxBin { lo += m }
+                        else if b <= midMaxBin { md += m }
+                        else { hi += m }
+                    }
+                }
+            }
+            low[c] = lo; mid[c] = md; high[c] = hi
+            maxLow = max(maxLow, lo); maxMid = max(maxMid, md); maxHigh = max(maxHigh, hi)
+        }
+        // Normalizar cada banda a 0…1 por su propio máximo (para que el color use todo el rango).
+        var invLow = 1 / maxLow, invMid = 1 / maxMid, invHigh = 1 / maxHigh
+        vDSP_vsmul(low, 1, &invLow, &low, 1, vDSP_Length(columns))
+        vDSP_vsmul(mid, 1, &invMid, &mid, 1, vDSP_Length(columns))
+        vDSP_vsmul(high, 1, &invHigh, &high, 1, vDSP_Length(columns))
+        return (low, mid, high)
     }
 
     // MARK: - Carga de buffer

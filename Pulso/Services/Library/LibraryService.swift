@@ -173,6 +173,32 @@ final class LibraryService: ObservableObject {
         return track
     }
 
+    // MARK: - Migración de waveform (formato viejo → pico-a-pico + color)
+
+    /// Re-analiza en background las pistas cuyo waveform está en el formato viejo (sin
+    /// `waveformDetail`). Rápido en Apple Silicon. Persiste al terminar cada una. Idempotente.
+    /// Llamar al arrancar la app.
+    func migrateWaveformsIfNeeded() {
+        let pending = tracks.filter { $0.waveformDetail == nil }
+        guard !pending.isEmpty else { return }
+        Task { @MainActor in
+            for track in pending {
+                guard FileManager.default.fileExists(atPath: track.url.path) else { continue }
+                var t = track
+                await TrackAnalyzer.shared.analyze(track: &t)
+                if let idx = tracks.firstIndex(where: { $0.id == t.id }) {
+                    tracks[idx] = t
+                }
+                saveToDisk()   // persistir tras cada una (no perder progreso si algo falla)
+            }
+        }
+    }
+
+    /// Devuelve la versión más reciente (ya migrada) de un track si existe en la biblioteca.
+    func current(_ track: Track) -> Track {
+        tracks.first(where: { $0.id == track.id }) ?? track
+    }
+
     // MARK: - Edición del beatgrid (UI "Set Downbeat Here")
 
     /// Fija el downbeat del track al beat más cercano a `time` (segundos) y persiste.

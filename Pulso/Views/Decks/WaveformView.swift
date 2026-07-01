@@ -16,30 +16,57 @@ struct WaveformView: View {
             let visWidth = max(0.0001, visEnd - visStart)
 
             ZStack(alignment: .leading) {
-                if let waveform = deck.track?.waveformData, !waveform.isEmpty {
+                if let detail = deck.track?.waveformDetail, !detail.isEmpty {
+                    // Waveform PRO: pico-a-pico continuo (estilo espejo) + color por banda (FFT).
                     Canvas { ctx, size in
-                        let count = waveform.count
+                        let count = detail.count
                         let midY  = size.height / 2
-                        // Solo dibujamos las muestras dentro de la ventana visible, estiradas
-                        // a todo el ancho → esto ES el zoom.
-                        let firstIdx = Int(Double(count) * visStart)
+                        let progress = deck.progress
+                        // Columnas visibles según el zoom (una columna de datos → ≥1 px).
+                        let firstIdx = max(0, Int(Double(count) * visStart))
                         let lastIdx  = min(count, Int(Double(count) * visEnd) + 1)
                         guard lastIdx > firstIdx else { return }
                         let visibleCount = lastIdx - firstIdx
-                        let barW = size.width / CGFloat(visibleCount)
-                        let progress = deck.progress
+                        let colW = size.width / CGFloat(visibleCount)
 
                         for i in firstIdx..<lastIdx {
-                            let x = CGFloat(i - firstIdx) * barW
-                            let h = max(2, CGFloat(waveform[i]) * size.height * 0.9)
-                            let rect = CGRect(x: x + barW * 0.1, y: midY - h / 2,
-                                              width: max(0.5, barW * 0.8), height: h)
+                            let x = CGFloat(i - firstIdx) * colW
+                            // Altura pico-a-pico: de min a max (simétrico respecto al centro).
+                            let up   = CGFloat(detail.maxs[i]) * midY * 0.95
+                            let down = CGFloat(-detail.mins[i]) * midY * 0.95
+                            let barX = x
+                            let barW = max(0.6, colW)      // continua: sin gaps a resolución nativa
+                            let rect = CGRect(x: barX, y: midY - up, width: barW, height: up + down)
+
+                            // Color por banda dominante (Serato/VirtualDJ): rojo graves, verde
+                            // medios, azul agudos. Mezcla las 3 energías → tonalidad continua.
+                            let lo = detail.low[i], md = detail.mid[i], hi = detail.high[i]
+                            let sum = max(0.0001, lo + md + hi)
+                            let r = Double(lo / sum), g = Double(md / sum), b = Double(hi / sum)
+                            var color = Color(red: 0.35 + 0.65*r, green: 0.30 + 0.55*g, blue: 0.40 + 0.60*b)
+
                             let sampleProg = Double(i) / Double(count)
-                            let played = sampleProg < progress
-                            ctx.fill(
-                                Path(roundedRect: rect, cornerRadius: 1),
-                                with: .color(played ? Color.accentColor : Color.accentColor.opacity(0.3))
-                            )
+                            if sampleProg >= progress { color = color.opacity(0.35) }  // no reproducido
+
+                            ctx.fill(Path(rect), with: .color(color))
+                        }
+                    }
+                } else if let waveform = deck.track?.waveformData, !waveform.isEmpty {
+                    // Fallback legacy (pista aún no migrada): miniatura de picos monocroma.
+                    Canvas { ctx, size in
+                        let count = waveform.count
+                        let midY  = size.height / 2
+                        let firstIdx = Int(Double(count) * visStart)
+                        let lastIdx  = min(count, Int(Double(count) * visEnd) + 1)
+                        guard lastIdx > firstIdx else { return }
+                        let colW = size.width / CGFloat(lastIdx - firstIdx)
+                        let progress = deck.progress
+                        for i in firstIdx..<lastIdx {
+                            let x = CGFloat(i - firstIdx) * colW
+                            let h = max(2, CGFloat(waveform[i]) * size.height * 0.9)
+                            let played = Double(i) / Double(count) < progress
+                            ctx.fill(Path(CGRect(x: x, y: midY - h/2, width: max(0.6, colW), height: h)),
+                                     with: .color(played ? Color.accentColor : Color.accentColor.opacity(0.3)))
                         }
                     }
                 } else {

@@ -17,6 +17,12 @@
 
 ---
 
+### [2026-07-01] — Waveform "suena pero la onda está plana al inicio" + barras gruesas
+**Bug**: en "Llorarás" (Óscar D'León) el audio suena desde ~0.5s pero la onda mostraba línea plana hasta ~2.6s. Además barras gruesas y separadas, sin definición pro.
+**Causa (medida empíricamente sobre el archivo real)**: (1) el generador solo leía `floatChannelData[0]` = canal L → intros paneadas a R salen planas. (2) Baja resolución: 512 muestras sobre 222s = 0.43s/muestra; el fade-in de 0.5s se promediaba a ~0 en 6 muestras = 2.6s de plano visual para 0.5s de silencio real. (3) Solo se guardaba `max` de magnitud (no min/max) → barras, no pico-a-pico. NO era la duración: AVURLAsset (222.177s) y buffer decodificado (222.200s) coinciden al 0.01%.
+**Fix**: `WaveformDetail` nuevo (Codable): mono-mix (L+R)/2, pico-a-pico (min/max) por columna, 3000 columnas sin truncar frames, + energía por banda (FFT: low/mid/high) para color estilo Serato. WaveformView dibuja línea pico-a-pico continua coloreada por banda dominante. Migración automática en background al arrancar (`migrateWaveformsIfNeeded`) re-analiza pistas viejas. Resultado medido: plano inicial 2.6s→0.74s (−72% de desfase).
+**Regla**: para waveform siempre mono-mix (no un solo canal) + resolución alta (≥1 columna por píxel de pantalla) + pico-a-pico (min y max, no solo |max|). Verificar el desfase visual midiendo el primer frame audible del archivo real, no a ojo.
+
 ### [2026-07-01] — SYNC al beatgrid: el phase-lock se clavaba a medio beat por estado de tiempo mentiroso
 **Bug**: al conectar el phase-lock al beatgrid real (fase desde `beatGrid.beats` en vez de contra t=0), el lazo NO convergía: el error de fase se quedaba clavado en 0.5 (medio beat) para siempre. En vivo = beatmatch que rebota y nunca engancha.
 **Causa**: el timer del phase-lock cambia `slavePitch.rate` con el nudge (p.ej. 1.05), pero NO actualizaba `playTempo`/`playHostTime`/`pausedAt` del slave. Como `currentAudioTime(deck:)` estima la posición de archivo con `pausedAt + (now-playHostTime)*playTempo`, seguía integrando con el tempo BASE (1.0) mientras el audio real avanzaba al rate con nudge (1.05). → La posición de archivo que se usaba para consultar `gridPhase` estaba ATRASADA respecto al audio real → el lazo medía la fase sobre una posición mentirosa → feedback loop divergente que se satura a err=0.5.

@@ -23,6 +23,9 @@ struct PulsoApp: App {
                     #endif
 
                     audioEngine.restoreSession(library: libraryService)
+                    // Migrar waveforms del formato viejo (solo canal L, baja res) al nuevo
+                    // (pico-a-pico + color). Background, idempotente.
+                    libraryService.migrateWaveformsIfNeeded()
                 }
         }
         #if os(macOS)
