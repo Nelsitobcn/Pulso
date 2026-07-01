@@ -4,11 +4,12 @@ import SwiftUI
 struct LibraryView: View {
     @EnvironmentObject var libraryService: LibraryService
     @EnvironmentObject var audioEngine: AudioEngine
+    /// Compartido (creado en MainDJView) para que el panel de resultados pueda dibujarse como
+    /// overlay flotante a nivel de ventana, sin que lo confine el maxHeight de la biblioteca.
+    @EnvironmentObject var youtube: YouTubeService
 
-    @StateObject private var youtube = YouTubeService()
     @StateObject private var djAssistant = DJAssistantService()
     @State private var searchQuery = ""
-    @State private var youtubeQuery = ""
     @State private var youtubeError: String?
     @State private var sortBy: SortOption = .addedAt
 
@@ -40,7 +41,7 @@ struct LibraryView: View {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.title3)
                         .foregroundStyle(Color.red)
-                    TextField("Buscar canción en YouTube…", text: $youtubeQuery)
+                    TextField("Buscar canción en YouTube…", text: $youtube.query)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit(searchYouTube)
                         .disabled(youtube.isSearching || youtube.isDownloading)
@@ -55,7 +56,7 @@ struct LibraryView: View {
                             Label("Buscar", systemImage: "magnifyingglass")
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(youtubeQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(youtube.query.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
 
@@ -73,16 +74,9 @@ struct LibraryView: View {
                     }
                 }
 
-                // Lista de resultados (panel desplegable)
-                if !youtube.searchResults.isEmpty {
-                    YouTubeResultsPanel(
-                        results: youtube.searchResults,
-                        isBusy: youtube.isDownloading,
-                        onPreview: previewResult,
-                        onLoad: loadResultToDeck,
-                        onClose: { youtube.searchResults = [] }
-                    )
-                }
+                // NOTA: la lista de resultados NO va aquí en el flujo (empujaría el layout y
+                // taparía los controles de los decks). Se muestra como overlay flotante — ver
+                // `.overlay` al final del body. Así NUNCA altera la escala ni tapa el Play/CUE.
 
                 if let youtubeError {
                     Text(youtubeError)
@@ -130,7 +124,7 @@ struct LibraryView: View {
 
             // Caja "Mauri-Bot": cola sugerida por IA local + tendencias globales
             DJAssistantBox(assistant: djAssistant, onSearchTrending: { query in
-                youtubeQuery = query
+                youtube.query = query
                 searchYouTube()
             }) {
                 let deck = audioEngine.deckA.track ?? audioEngine.deckB.track
@@ -163,44 +157,12 @@ struct LibraryView: View {
     /// Pre-escuchar: stream instantáneo de YouTube (sin descargar) para auriculares.
     /// Busca en YouTube y despliega la lista de resultados en el panel.
     private func searchYouTube() {
-        let query = youtubeQuery.trimmingCharacters(in: .whitespaces)
+        let query = youtube.query.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return }
         youtubeError = nil
         Task {
             do { _ = try await youtube.search(query: query, limit: 8) }
             catch { youtubeError = error.localizedDescription }
-        }
-    }
-
-    /// Preescucha un resultado: lo descarga (rápido, caché) y lo suena por el CANAL DE CUE
-    /// del engine (volumen propio, sin mezclarse con los decks). Si te gusta, "Cargar" es
-    /// instantáneo porque ya está en caché.
-    private func previewResult(_ r: YouTubeService.SearchResult) {
-        youtubeError = nil
-        Task {
-            do {
-                let localURL = try await youtube.download(query: r.videoURL)
-                audioEngine.startCuePreview(url: localURL, title: "\(r.artist) — \(r.title)")
-            } catch {
-                youtubeError = error.localizedDescription
-            }
-        }
-    }
-
-    /// Carga un resultado a un deck: descarga (o usa caché) → analiza → biblioteca → deck.
-    private func loadResultToDeck(_ r: YouTubeService.SearchResult, _ deck: DeckID) {
-        youtubeError = nil
-        Task {
-            do {
-                audioEngine.stopCuePreview()
-                let localURL = try await youtube.download(query: r.videoURL)
-                let imported = await libraryService.importTracks(urls: [localURL])
-                if let track = imported.first {
-                    audioEngine.load(track: track, into: deck)
-                }
-            } catch {
-                youtubeError = error.localizedDescription
-            }
         }
     }
 
@@ -220,29 +182,41 @@ struct LibraryView: View {
 
 /// Panel desplegable con la lista de resultados de YouTube. Cada fila: título/artista/duración
 /// + preescuchar (canal de cue) + cargar a Deck A / Deck B.
+/// Autónomo: usa los servicios por environment y hace preview/carga él mismo. Se dibuja como
+/// overlay flotante desde MainDJView (a nivel de ventana) → nunca tapa los controles de deck.
 struct YouTubeResultsPanel: View {
-    let results: [YouTubeService.SearchResult]
-    let isBusy: Bool
-    let onPreview: (YouTubeService.SearchResult) -> Void
-    let onLoad: (YouTubeService.SearchResult, DeckID) -> Void
-    let onClose: () -> Void
+    @EnvironmentObject var youtube: YouTubeService
+    @EnvironmentObject var audioEngine: AudioEngine
+    @EnvironmentObject var libraryService: LibraryService
+
+    @State private var errorText: String?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("\(results.count) resultados de YouTube")
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(.red)
+                Text("\(youtube.searchResults.count) resultados de YouTube")
                     .font(.caption.bold()).foregroundStyle(.secondary)
+                if youtube.isDownloading {
+                    ProgressView().controlSize(.mini)
+                }
                 Spacer()
-                Button { onClose() } label: {
+                Button { youtube.searchResults = [] } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
+                .help("Cerrar resultados")
             }
-            .padding(.horizontal, 8).padding(.vertical, 4)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+
+            if let errorText {
+                Text(errorText).font(.caption2).foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8)
+            }
 
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(results) { r in
+                    ForEach(youtube.searchResults) { r in
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(r.title).font(.caption).lineLimit(1)
@@ -252,18 +226,15 @@ struct YouTubeResultsPanel: View {
                             Text(r.durationText)
                                 .font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
 
-                            Button { onPreview(r) } label: {
-                                Image(systemName: "headphones")
-                            }
-                            .buttonStyle(.bordered).controlSize(.small)
-                            .disabled(isBusy)
-                            .help("Preescuchar en el canal de cue")
-
-                            Button { onLoad(r, .left) } label: { Text("A").bold() }
-                                .buttonStyle(.bordered).controlSize(.small).disabled(isBusy)
+                            Button { preview(r) } label: { Image(systemName: "headphones") }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .disabled(youtube.isDownloading)
+                                .help("Preescuchar en el canal de cue")
+                            Button { load(r, .left) } label: { Text("A").bold() }
+                                .buttonStyle(.bordered).controlSize(.small).disabled(youtube.isDownloading)
                                 .help("Cargar al Deck A")
-                            Button { onLoad(r, .right) } label: { Text("B").bold() }
-                                .buttonStyle(.bordered).controlSize(.small).disabled(isBusy)
+                            Button { load(r, .right) } label: { Text("B").bold() }
+                                .buttonStyle(.bordered).controlSize(.small).disabled(youtube.isDownloading)
                                 .help("Cargar al Deck B")
                         }
                         .padding(.horizontal, 8).padding(.vertical, 4)
@@ -273,10 +244,32 @@ struct YouTubeResultsPanel: View {
                 }
                 .padding(.horizontal, 4)
             }
-            .frame(maxHeight: 220)
+            .frame(maxHeight: 240)     // scroll interno: nunca crece más de esto
         }
-        .background(Color.black.opacity(0.25))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func preview(_ r: YouTubeService.SearchResult) {
+        errorText = nil
+        Task {
+            do {
+                let url = try await youtube.download(query: r.videoURL)
+                audioEngine.startCuePreview(url: url, title: "\(r.artist) — \(r.title)")
+            } catch { errorText = error.localizedDescription }
+        }
+    }
+
+    private func load(_ r: YouTubeService.SearchResult, _ deck: DeckID) {
+        errorText = nil
+        Task {
+            do {
+                audioEngine.stopCuePreview()
+                let url = try await youtube.download(query: r.videoURL)
+                let imported = await libraryService.importTracks(urls: [url])
+                if let track = imported.first { audioEngine.load(track: track, into: deck) }
+            } catch { errorText = error.localizedDescription }
+        }
     }
 }
 
@@ -288,6 +281,14 @@ struct DJAssistantBox: View {
     /// Callback cuando el DJ pulsa "buscar en YouTube" en una sugerencia de tendencia no-local.
     var onSearchTrending: (String) -> Void = { _ in }
     let onAsk: () -> Void
+
+    /// Track "On Air" en el que se basan las sugerencias (deck master = el que suena; si ambos
+    /// o ninguno, prioriza A). Se muestra para que el DJ sepa sobre qué se sugiere (como Rekordbox).
+    private var onAirTrack: Track? {
+        if audioEngine.deckA.isPlaying { return audioEngine.deckA.track }
+        if audioEngine.deckB.isPlaying { return audioEngine.deckB.track }
+        return audioEngine.deckA.track ?? audioEngine.deckB.track
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -306,6 +307,18 @@ struct DJAssistantBox: View {
                 }
             }
 
+            // Track On Air en el que se basa (BPM + Key). Como Rekordbox Collection Radar.
+            if let air = onAirTrack {
+                HStack(spacing: 4) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 9)).foregroundStyle(.green)
+                    Text("Sobre: \(air.artist) — \(air.title)")
+                        .font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
+                    if let b = air.bpm { Text("· \(Int(b)) BPM").font(.system(size: 10)).foregroundStyle(.tertiary) }
+                    if let k = air.key { Text("· \(k.rawValue)").font(.system(size: 10)).foregroundStyle(.tertiary) }
+                }
+            }
+
             if let err = assistant.errorText {
                 Text(err).font(.caption2).foregroundStyle(.secondary)
             }
@@ -315,12 +328,27 @@ struct DJAssistantBox: View {
                     if case .trending = s.origin { return true }; return false
                 }()
                 HStack(spacing: 8) {
-                    Text("\(idx + 1)")
-                        .font(.caption2.bold())
-                        .foregroundStyle(isTrending ? .orange : .purple)
-                        .frame(width: 16)
+                    // Primera columna: icono de origen (Serato/Rekordbox ponen aquí el logo del
+                    // servicio). Tendencia = llama 🔥; local = número de orden.
+                    if isTrending {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 11)).foregroundStyle(.orange).frame(width: 16)
+                    } else {
+                        Text("\(idx + 1)")
+                            .font(.caption2.bold()).foregroundStyle(.purple).frame(width: 16)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(s.track.title).font(.caption.bold()).lineLimit(1)
+                        HStack(spacing: 4) {
+                            Text(s.track.title).font(.caption.bold()).lineLimit(1)
+                            if isTrending {
+                                Text("TOP")
+                                    .font(.system(size: 7, weight: .heavy))
+                                    .padding(.horizontal, 3).padding(.vertical, 1)
+                                    .background(Color.orange.opacity(0.25))
+                                    .foregroundStyle(.orange)
+                                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                            }
+                        }
                         Text(s.reason).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer()

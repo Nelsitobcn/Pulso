@@ -77,6 +77,9 @@ final class YouTubeService: ObservableObject {
 
     @Published var searchResults: [SearchResult] = []
     @Published var isSearching = false
+    /// Texto del buscador. Vive en el servicio (no en la vista) para que tanto el TextField de
+    /// la biblioteca como el overlay flotante de resultados compartan el mismo estado.
+    @Published var query: String = ""
 
     /// Busca en YouTube y devuelve una LISTA de hasta `limit` resultados (sin descargar).
     /// Rápido: solo pide metadatos (`--flat-playlist`), no resuelve streams.

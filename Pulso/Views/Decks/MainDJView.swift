@@ -7,6 +7,9 @@ struct MainDJView: View {
 
     @State private var showLibrary = true
     @State private var isImporting = false
+    /// Servicio de YouTube compartido: el TextField vive en LibraryView, pero el panel de
+    /// resultados se dibuja aquí como overlay flotante (nivel ventana) para no tapar controles.
+    @StateObject private var youtube = YouTubeService()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,12 +51,27 @@ struct MainDJView: View {
             // Biblioteca (colapsable)
             if showLibrary {
                 LibraryView()
+                    .environmentObject(youtube)
                     .frame(maxHeight: 280)
                     .transition(.move(edge: .bottom))
             }
         }
         .background(Color("BGPrimary").ignoresSafeArea())
+        // Panel de resultados de YouTube: OVERLAY FLOTANTE a nivel de ventana, anclado abajo a
+        // la derecha, con altura acotada + scroll interno. Se superpone SIN empujar el layout ni
+        // tapar los controles de los decks (Play/CUE/faders siempre operativos). Cierre con la X.
+        .overlay(alignment: .bottomTrailing) {
+            if !youtube.searchResults.isEmpty {
+                YouTubeResultsPanel()
+                    .environmentObject(youtube)
+                    .frame(width: 440)
+                    .padding(14)
+                    .shadow(color: .black.opacity(0.45), radius: 14, y: 5)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
         .animation(.easeInOut(duration: 0.2), value: showLibrary)
+        .animation(.easeInOut(duration: 0.2), value: youtube.searchResults.isEmpty)
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .automatic) {

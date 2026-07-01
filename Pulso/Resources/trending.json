@@ -13,6 +13,14 @@
     { "title": "PROVENZA", "artist": "Karol G", "genre": "reggaeton", "bpm": 111, "camelot": "3A", "energy": 0.72 },
     { "title": "Ella Baila Sola", "artist": "Eslabon Armado & Peso Pluma", "genre": "corridos", "bpm": 148, "camelot": "11B", "energy": 0.7 },
     { "title": "TQG", "artist": "Karol G & Shakira", "genre": "reggaeton", "bpm": 97, "camelot": "2A", "energy": 0.75 },
-    { "title": "Gasolina", "artist": "Daddy Yankee", "genre": "reggaeton", "bpm": 95, "camelot": "10A", "energy": 0.95 }
+    { "title": "Gasolina", "artist": "Daddy Yankee", "genre": "reggaeton", "bpm": 95, "camelot": "10A", "energy": 0.95 },
+    { "title": "Idole", "artist": "Bad Bunny", "genre": "reggaeton", "bpm": 100, "camelot": "8A", "energy": 0.82 },
+    { "title": "La Perla", "artist": "Bad Bunny & Chuwi", "genre": "salsa", "bpm": 96, "camelot": "5A", "energy": 0.7 },
+    { "title": "Nadie Sabe", "artist": "El Chulo & Bebeshito", "genre": "reparto", "bpm": 102, "camelot": "9A", "energy": 0.88 },
+    { "title": "Ojitos Lindos", "artist": "Bad Bunny & Bomba Estéreo", "genre": "comercial latino", "bpm": 80, "camelot": "4A", "energy": 0.6 },
+    { "title": "Yandel 150", "artist": "Yandel & Feid", "genre": "reggaeton", "bpm": 92, "camelot": "11A", "energy": 0.78 },
+    { "title": "Que Manera de Quererte", "artist": "El Gran Combo", "genre": "salsa", "bpm": 90, "camelot": "7A", "energy": 0.72 },
+    { "title": "El Reparto Me Persigue", "artist": "Wampi", "genre": "reparto", "bpm": 105, "camelot": "6A", "energy": 0.9 },
+    { "title": "Perro Negro", "artist": "Bad Bunny & Feid", "genre": "reggaeton", "bpm": 96, "camelot": "2A", "energy": 0.8 }
   ]
 }

@@ -100,23 +100,27 @@ final class DJAssistantService: ObservableObject {
         }
 
         // 2) Tendencias compatibles que NO están ya en la biblioteca.
+        // Reglas del research (Serato/Rekordbox/VirtualDJ): BPM ±10% (incl. doble/mitad) Y/O
+        // Camelot compatible (mismo código o ±1). Se ordena las tendencias por popularidad
+        // (energía como proxy) — "más popular arriba" (Rekordbox Streaming Radar).
         let libraryKeys = Set(library.map { "\($0.title.lowercased())|\($0.artist.lowercased())" })
         let curBPM = (current.bpm ?? 0) * 1.0
-        let trendingSug: [Suggestion] = trending.compactMap { t in
-            let key = "\(t.title.lowercased())|\(t.artist.lowercased())"
-            if libraryKeys.contains(key) { return nil }   // ya la tienes local → no duplicar
-            // Filtro de compatibilidad ligero: BPM dentro de ±12% (incluye doble/mitad) o Camelot igual.
-            let bpmOK = curBPM <= 0 || bpmCompatible(curBPM, t.bpm)
-            let keyOK = current.key?.rawValue == t.camelot
-            guard bpmOK || keyOK else { return nil }
-            // Track "fantasma" (no descargado): sirve para mostrar título/artista/bpm en la UI.
-            let ghost = Track(title: t.title, artist: t.artist,
-                              url: URL(fileURLWithPath: "/trending/\(t.title)"),
-                              bpm: t.bpm, key: MusicalKey(rawValue: t.camelot), genre: t.genre)
-            let reason = "🔥 Tendencia (\(t.genre)) · \(Int(t.bpm)) BPM \(t.camelot) — búscala en YouTube"
-            return Suggestion(track: ghost, reason: reason,
-                              origin: .trending(youtubeQuery: "\(t.artist) \(t.title)"))
-        }
+        let curKey = current.key
+        let trendingSug: [Suggestion] = trending
+            .sorted { $0.energy > $1.energy }   // más "sonado" primero
+            .compactMap { t in
+                let key = "\(t.title.lowercased())|\(t.artist.lowercased())"
+                if libraryKeys.contains(key) { return nil }   // ya la tienes local → no duplicar
+                let bpmOK = curBPM <= 0 || bpmCompatible(curBPM, t.bpm)
+                let keyOK = curKey == nil || camelotCompatible(curKey!.rawValue, t.camelot)
+                guard bpmOK && (keyOK || curKey == nil) else { return nil }
+                let ghost = Track(title: t.title, artist: t.artist,
+                                  url: URL(fileURLWithPath: "/trending/\(t.title)"),
+                                  bpm: t.bpm, key: MusicalKey(rawValue: t.camelot), genre: t.genre)
+                let reason = "Tendencia \(t.genre) · \(Int(t.bpm)) BPM · \(t.camelot)"
+                return Suggestion(track: ghost, reason: reason,
+                                  origin: .trending(youtubeQuery: "\(t.artist) \(t.title)"))
+            }
 
         // 3) Intercalar: primero 3 locales, luego tendencias, luego el resto local.
         var mixed: [Suggestion] = []
@@ -130,11 +134,26 @@ final class DJAssistantService: ObservableObject {
         suggestions = mixed
     }
 
-    /// BPM compatible: exacto (≤8%) o en relación doble/mitad (≤8%).
+    /// BPM compatible: dentro de ±10% (VirtualDJ Smart Play) o en relación doble/mitad ±10%.
     private func bpmCompatible(_ a: Double, _ b: Double) -> Bool {
         guard a > 0, b > 0 else { return false }
         let ratios = [1.0, 2.0, 0.5]
-        return ratios.contains { abs(a - b * $0) / a <= 0.08 }
+        return ratios.contains { abs(a - b * $0) / a <= 0.10 }
+    }
+
+    /// Camelot compatible (rueda armónica): mismo código, número ±1 (misma letra) o cambio de
+    /// letra (mismo número). Ej. 8A → 8A, 7A, 9A, 8B. Reglas estándar de harmonic mixing.
+    private func camelotCompatible(_ a: String, _ b: String) -> Bool {
+        guard a.count >= 2, b.count >= 2,
+              let na = Int(a.dropLast()), let nb = Int(b.dropLast()) else { return a == b }
+        let la = a.last!, lb = b.last!
+        if a == b { return true }                          // mismo código
+        if la == lb {                                       // misma letra → número ±1 (circular 1-12)
+            let diff = abs(na - nb)
+            return min(diff, 12 - diff) == 1
+        }
+        if na == nb { return true }                         // mismo número, distinta letra (A↔B)
+        return false
     }
 
     /// Arma la cola de una SESIÓN a partir de un mood/estilo (ej. "salsa", "techno peak time",
