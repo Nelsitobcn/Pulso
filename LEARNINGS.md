@@ -17,6 +17,12 @@
 
 ---
 
+### [2026-07-01] — Panel beatmatch "bloques gruesos" al ampliar: era sobre-muestreo, no grosor
+**Bug**: la onda ampliada del panel central se veía como bloques macizos aunque cada barra se dibujaba a 1px.
+**Causa (medida)**: el panel amplía ~6s en ~1400px, pero el `waveformDetail` general (3000 cols para 222s) solo aporta **~81 columnas** en esa ventana → cada columna de dato se estira ~17px = bloque. No era el grosor de dibujo, era falta de resolución de datos AL AMPLIAR. Guardar ~52.000 cols/pista (1px por columna a esa escala) es inviable en disco.
+**Fix**: `HiResWaveformCache` — genera ~200 picos/seg (min/max, mono-mix) leyendo el audio SOLO en RAM (~44 KB/min), al cargar la pista en un deck; se descarta al expulsar. El panel dibuja hilos finos (stroke 1px) con esos datos → detalle real tipo Serato. La ventana de 6s pasa de 81 a 1200 columnas.
+**Regla**: para una vista de onda AMPLIADA, la resolución necesaria = px_visibles / segundos_visibles columnas/seg, no la de la miniatura general. Si no cabe en disco, generar a demanda en RAM. Un dibujo "1px por barra" NO es fino si cada barra cubre 17px por falta de datos.
+
 ### [2026-07-01] — Waveform "suena pero la onda está plana al inicio" + barras gruesas
 **Bug**: en "Llorarás" (Óscar D'León) el audio suena desde ~0.5s pero la onda mostraba línea plana hasta ~2.6s. Además barras gruesas y separadas, sin definición pro.
 **Causa (medida empíricamente sobre el archivo real)**: (1) el generador solo leía `floatChannelData[0]` = canal L → intros paneadas a R salen planas. (2) Baja resolución: 512 muestras sobre 222s = 0.43s/muestra; el fade-in de 0.5s se promediaba a ~0 en 6 muestras = 2.6s de plano visual para 0.5s de silencio real. (3) Solo se guardaba `max` de magnitud (no min/max) → barras, no pico-a-pico. NO era la duración: AVURLAsset (222.177s) y buffer decodificado (222.200s) coinciden al 0.01%.

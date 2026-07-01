@@ -2,7 +2,11 @@ import SwiftUI
 
 struct WaveformView: View {
     @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
     let onSeek: (Double) -> Void
+
+    // Arrastre tipo vinilo.
+    @State private var dragAnchorTime: Double? = nil
 
     /// Fracción [0,1] → tiempo, respetando el rango visible por zoom.
     private func fractionToProgress(_ xFraction: Double) -> Double {
@@ -132,11 +136,27 @@ struct WaveformView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
+            // Arrastre tipo VINILO: agarrar y mover desplaza la pista (relativo). Arrastrar a la
+            // derecha → la pista retrocede (empujar el plato). Ultrapreciso: el desplazamiento en
+            // píxeles se escala por el rango visible (con zoom = más preciso).
             .gesture(
-                DragGesture(minimumDistance: 0)
+                DragGesture(minimumDistance: 1)
                     .onChanged { v in
-                        let xFrac = max(0, min(1, Double(v.location.x / geo.size.width)))
-                        onSeek(fractionToProgress(xFrac))
+                        guard let track = deck.track, track.duration > 0 else { return }
+                        if dragAnchorTime == nil {
+                            dragAnchorTime = deck.currentTime
+                            audioEngine.beginScrub(deck: deck.id)
+                        }
+                        let (visStart, visEnd) = deck.waveformVisibleRange
+                        let secPerFrac = (visEnd - visStart) * track.duration
+                        let fracPerPx = 1.0 / Double(geo.size.width)
+                        let deltaT = -Double(v.translation.width) * fracPerPx * secPerFrac
+                        let target = min(max(0, (dragAnchorTime ?? 0) + deltaT), track.duration)
+                        audioEngine.scrub(to: target, deck: deck.id)
+                    }
+                    .onEnded { _ in
+                        dragAnchorTime = nil
+                        audioEngine.endScrub(deck: deck.id)
                     }
             )
             #if os(macOS)

@@ -14,6 +14,7 @@
 		12B484392CE2A53C61C4A24D /* LibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4B3CCE3E5E929E6F5AA139 /* LibraryService.swift */; };
 		1766E8CFD2F0576A131600CE /* DeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */; };
 		26821B50E7919303759F9083 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA178B499D53592DEFA10D25 /* AuthService.swift */; };
+		2C25E2BD8B38B90A54C33A00 /* HiResWaveformCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */; };
 		320604246522AE05D48861D0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8236C939D512E4F41F901C83 /* SettingsView.swift */; };
 		378E950FF68FEB288C190A3C /* TurntableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA72FF8502521A96F5EA0F35 /* TurntableView.swift */; };
 		40708D1D4CBBA523EFAC1459 /* DeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */; };
@@ -47,6 +48,7 @@
 		BF8AEFC15929AE3E2C17E6B6 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411EF2E560DB7B1047A38187 /* AudioEngine.swift */; };
 		C2C5EACE7DBE386C815AAA07 /* BeatGridAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */; };
 		C93792DA83E883508DEB2848 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
+		C93D5E91BCAC1545247DDC40 /* HiResWaveformCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */; };
 		CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2257B39832162A06644607F /* MainDJView.swift */; };
 		CC78F29C51EB32C3546AD38C /* SessionStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44453B15CFF2ACA9636C23BE /* SessionStartView.swift */; };
 		CCE22B594C7E1EA9A42155D2 /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD6A3CB171D2E0E9B0C7FA4 /* YouTubeService.swift */; };
@@ -75,6 +77,7 @@
 		6473E4169BDDA444411FE978 /* PulsoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulsoApp.swift; sourceTree = "<group>"; };
 		7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatGridAnalyzer.swift; sourceTree = "<group>"; };
 		8236C939D512E4F41F901C83 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiResWaveformCache.swift; sourceTree = "<group>"; };
 		9A948DE4CE18404260A9E357 /* EQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQView.swift; sourceTree = "<group>"; };
 		B4B224FA76EEF28A68714440 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJAssistantService.swift; sourceTree = "<group>"; };
@@ -104,6 +107,7 @@
 			children = (
 				411EF2E560DB7B1047A38187 /* AudioEngine.swift */,
 				7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */,
+				956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */,
 				F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */,
 			);
 			path = Audio;
@@ -341,6 +345,7 @@
 				6AABF702C0DFE01D53AB8123 /* DeckState.swift in Sources */,
 				40708D1D4CBBA523EFAC1459 /* DeckView.swift in Sources */,
 				796864AE8CDAA7F220DEF0BD /* EQView.swift in Sources */,
+				2C25E2BD8B38B90A54C33A00 /* HiResWaveformCache.swift in Sources */,
 				D1202606418785E211CA874B /* LibraryService.swift in Sources */,
 				7584B568FBA9280759BF1B90 /* LibraryView.swift in Sources */,
 				CAC54BA36D6D263F0EC6B663 /* MainDJView.swift in Sources */,
@@ -371,6 +376,7 @@
 				496D04F5C5D48B8327937245 /* DeckState.swift in Sources */,
 				1766E8CFD2F0576A131600CE /* DeckView.swift in Sources */,
 				BD5D5ABA53ECB032F8A7C7FD /* EQView.swift in Sources */,
+				C93D5E91BCAC1545247DDC40 /* HiResWaveformCache.swift in Sources */,
 				12B484392CE2A53C61C4A24D /* LibraryService.swift in Sources */,
 				7BD8319F2F800D4BA5C9B253 /* LibraryView.swift in Sources */,
 				BBFC1A117BA4EBEFDE0EDDE6 /* MainDJView.swift in Sources */,

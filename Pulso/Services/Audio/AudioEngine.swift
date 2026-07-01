@@ -272,6 +272,8 @@ final class AudioEngine: ObservableObject {
             deckState.loopStart   = 0
             deckState.loopEnd     = 0
             deckState.hotCues     = []
+            // Picos de alta densidad (RAM) para la onda ampliada del panel beatmatch.
+            HiResWaveformCache.shared.ensure(track: track)
             saveSession()
         } catch {
             print("[AudioEngine] ❌ Error cargando \(track.title): \(error)")
@@ -316,6 +318,47 @@ final class AudioEngine: ObservableObject {
         deckState.currentTime = time
         if wasPlaying {
             startPlayback(from: time, deck: deck)
+        }
+        saveSession()
+    }
+
+    // MARK: - Scrub (arrastre tipo vinilo)
+
+    /// Recuerda si el deck estaba sonando al empezar un arrastre, para reanudar al soltar.
+    private var scrubWasPlayingA = false
+    private var scrubWasPlayingB = false
+
+    /// Empieza un arrastre tipo vinilo: silencia el audio del deck (el player se para) para que
+    /// mover la onda no dispare glitches. NO reprograma en cada frame (eso lo hace `endScrub`).
+    func beginScrub(deck: DeckID) {
+        let deckState = deck == .left ? deckA : deckB
+        let player = deck == .left ? playerA : playerB
+        let wasPlaying = deckState.isPlaying
+        if deck == .left { scrubWasPlayingA = wasPlaying } else { scrubWasPlayingB = wasPlaying }
+        // Soltar el phase-lock si este deck participaba (el DJ está tomando control manual).
+        if phaseLockSlave != nil { stopPhaseLock() }
+        player.stop()
+        stopTimer(deck: deck)
+        deckState.isPlaying = false
+    }
+
+    /// Durante el arrastre: solo mueve el playhead (barato, a 60fps). No toca el audio.
+    func scrub(to time: TimeInterval, deck: DeckID) {
+        let deckState = deck == .left ? deckA : deckB
+        guard let dur = deckState.track?.duration else { return }
+        let t = min(max(0, time), dur)
+        if deck == .left { pausedAtA = t } else { pausedAtB = t }
+        deckState.currentTime = t
+    }
+
+    /// Fin del arrastre: fija la posición exacta y reanuda la reproducción si estaba sonando.
+    func endScrub(deck: DeckID) {
+        let deckState = deck == .left ? deckA : deckB
+        let t = deckState.currentTime
+        let wasPlaying = deck == .left ? scrubWasPlayingA : scrubWasPlayingB
+        if deck == .left { pausedAtA = t } else { pausedAtB = t }
+        if wasPlaying {
+            startPlayback(from: t, deck: deck)   // reanuda exactamente donde soltó
         }
         saveSession()
     }
