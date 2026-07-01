@@ -59,6 +59,66 @@ final class YouTubeService: ObservableObject {
         let durationSeconds: TimeInterval
     }
 
+    /// Un resultado de búsqueda (sin descargar todavía): metadatos para la lista del panel.
+    struct SearchResult: Identifiable, Equatable {
+        let id: String        // videoId de YouTube
+        let title: String
+        let artist: String
+        let durationSeconds: TimeInterval
+        /// URL canónica del vídeo, para descargar/previsualizar después.
+        var videoURL: String { "https://www.youtube.com/watch?v=\(id)" }
+
+        var durationText: String {
+            guard durationSeconds > 0 else { return "--:--" }
+            let m = Int(durationSeconds) / 60, s = Int(durationSeconds) % 60
+            return String(format: "%d:%02d", m, s)
+        }
+    }
+
+    @Published var searchResults: [SearchResult] = []
+    @Published var isSearching = false
+
+    /// Busca en YouTube y devuelve una LISTA de hasta `limit` resultados (sin descargar).
+    /// Rápido: solo pide metadatos (`--flat-playlist`), no resuelve streams.
+    func search(query: String, limit: Int = 8) async throws -> [SearchResult] {
+        #if !os(macOS)
+        throw YouTubeError.unsupportedPlatform
+        #else
+        guard let ytdlp = Self.ytdlpPath() else { throw YouTubeError.ytdlpNotFound }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+
+        isSearching = true
+        statusText = "Buscando…"
+        defer { isSearching = false }
+
+        // ytsearchN: con --flat-playlist es una búsqueda ligera (sin resolver cada stream).
+        // Un campo por línea, separados por marcador  entre registros para parsear robusto.
+        let target = "ytsearch\(max(1, min(limit, 20))):\(q)"
+        let args = [
+            target,
+            "--flat-playlist", "--no-warnings", "--no-update",
+            "--print", "%(id)s\u{1f}%(title)s\u{1f}%(uploader)s\u{1f}%(duration)s"
+        ]
+        let output = try await Self.run(executable: ytdlp, arguments: args)
+        var results: [SearchResult] = []
+        for line in output.split(separator: "\n") {
+            let f = line.components(separatedBy: "\u{1f}")
+            guard f.count >= 4, !f[0].isEmpty else { continue }
+            let dur = Double(f[3].trimmingCharacters(in: .whitespaces)) ?? 0
+            results.append(SearchResult(
+                id: f[0].trimmingCharacters(in: .whitespaces),
+                title: f[1].isEmpty ? "(sin título)" : f[1],
+                artist: f[2].isEmpty ? "YouTube" : f[2],
+                durationSeconds: dur
+            ))
+        }
+        searchResults = results
+        statusText = results.isEmpty ? "Sin resultados" : "\(results.count) resultados"
+        return results
+        #endif
+    }
+
     /// PLAY EN VIVO — busca en YouTube y devuelve la URL de stream directa (sin descargar).
     /// Reproduce al instante con AVPlayer. ⚠️ La URL caduca en ~6h: para sesiones largas usar
     /// `download`. Ideal para previsualizar o lanzar un tema rápido.
@@ -97,8 +157,11 @@ final class YouTubeService: ObservableObject {
         #endif
     }
 
-    /// Reproduce un stream de YouTube en vivo con AVPlayer (preescucha en auriculares).
-    /// No pasa por el motor de DJ (sin EQ/SYNC) — es solo previsualización.
+    /// ⚠️ OBSOLETO (jul-2026): preescucha vieja por AVPlayer suelto → sonaba mezclada con los
+    /// decks (bug). La preescucha ahora va por el canal de cue del AudioEngine
+    /// (`startCuePreview`, volumen propio). Se mantiene solo por si se quiere un preview de
+    /// stream sin descargar en el futuro. No lo usa la UI.
+    @available(*, deprecated, message: "Usar AudioEngine.startCuePreview (canal de cue propio)")
     func preview(query: String) async throws {
         stopPreview()
         let result = try await streamURL(query: query)

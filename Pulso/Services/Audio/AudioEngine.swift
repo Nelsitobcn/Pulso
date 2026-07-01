@@ -59,6 +59,19 @@ final class AudioEngine: ObservableObject {
 
     private var masterMixer: AVAudioMixerNode { engine.mainMixerNode }
 
+    // Canal de PREESCUCHA (cue): independiente de los decks. Suena una pista candidata
+    // (p.ej. un resultado de YouTube ya descargado) con su propio volumen, sin pasar por
+    // los faders/crossfader ni mezclarse con el master de los decks.
+    private var previewPlayer = AVAudioPlayerNode()
+    private var previewMixer  = AVAudioMixerNode()
+    private var previewFile: AVAudioFile?
+    /// Volumen del canal de preescucha (0…1), independiente del master.
+    @Published var previewVolume: Double = 0.8 {
+        didSet { previewMixer.outputVolume = Float(previewVolume) }
+    }
+    @Published var isPreviewingCue = false
+    @Published var previewingTitle = ""
+
     // Archivo cargado por deck
     private var fileA: AVAudioFile?
     private var fileB: AVAudioFile?
@@ -107,7 +120,8 @@ final class AudioEngine: ObservableObject {
     private func setupGraph() {
         let nodesA: [AVAudioNode] = [playerA, pitchA, eqA, faderA]
         let nodesB: [AVAudioNode] = [playerB, pitchB, eqB, faderB]
-        (nodesA + nodesB).forEach { engine.attach($0) }
+        let nodesPreview: [AVAudioNode] = [previewPlayer, previewMixer]
+        (nodesA + nodesB + nodesPreview).forEach { engine.attach($0) }
 
         // Deck A: player → pitch → eq → fader → master
         engine.connect(playerA, to: pitchA,      format: nil)
@@ -120,6 +134,12 @@ final class AudioEngine: ObservableObject {
         engine.connect(pitchB,  to: eqB,         format: nil)
         engine.connect(eqB,     to: faderB,      format: nil)
         engine.connect(faderB,  to: masterMixer, format: nil)
+
+        // Canal de preescucha: previewPlayer → previewMixer → master.
+        // Va directo al master (sin EQ/crossfader): es un cue, no un deck.
+        engine.connect(previewPlayer, to: previewMixer, format: nil)
+        engine.connect(previewMixer,  to: masterMixer,  format: nil)
+        previewMixer.outputVolume = Float(previewVolume)
 
         // TimePitch: solo cambia velocidad, no tono
         pitchA.pitch = 0; pitchA.rate = 1
@@ -654,6 +674,38 @@ final class AudioEngine: ObservableObject {
         guard let dur = d.track?.duration else { return }
         d.loopEnd = min(d.loopStart + (d.loopEnd - d.loopStart) * factor, dur)
         saveSession()
+    }
+
+    // MARK: - Preescucha (cue) por canal propio
+
+    /// Reproduce un archivo de audio LOCAL por el canal de preescucha, con volumen propio,
+    /// sin mezclarse con los decks. Sustituye la preescucha vieja (AVPlayer suelto que sonaba
+    /// mezclado con todo). Pensado para escuchar un candidato antes de cargarlo a un deck.
+    func startCuePreview(url: URL, title: String) {
+        stopCuePreview()
+        guard let file = try? AVAudioFile(forReading: url) else { return }
+        previewFile = file
+        previewPlayer.scheduleFile(file, at: nil) { [weak self] in
+            Task { @MainActor in self?.finishCuePreview() }
+        }
+        if !engine.isRunning { try? engine.start() }
+        previewPlayer.play()
+        isPreviewingCue = true
+        previewingTitle = title
+    }
+
+    /// Detiene la preescucha del canal de cue.
+    func stopCuePreview() {
+        if previewPlayer.isPlaying { previewPlayer.stop() }
+        previewFile = nil
+        isPreviewingCue = false
+        previewingTitle = ""
+    }
+
+    /// Callback al terminar el archivo de preview de forma natural.
+    private func finishCuePreview() {
+        isPreviewingCue = false
+        previewingTitle = ""
     }
 
     /// Borde de un loop para el ajuste fino.
