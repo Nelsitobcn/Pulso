@@ -656,6 +656,26 @@ final class AudioEngine: ObservableObject {
         saveSession()
     }
 
+    /// Borde de un loop para el ajuste fino.
+    enum LoopEdge { case loopIn, loopOut }
+
+    /// Ajuste fino de un punto del loop en milisegundos (botones +/−). Mueve `loopStart`
+    /// (loopIn) o `loopEnd` (loopOut) con guardas: nunca cruzar el otro borde (mínimo 10 ms
+    /// de longitud) ni salir de la pista. Sirve para clavar el loop al beat exacto.
+    func nudgeLoopPoint(deck: DeckID, edge: LoopEdge, deltaMs: Double) {
+        let d = deck == .left ? deckA : deckB
+        guard let dur = d.track?.duration else { return }
+        let delta = deltaMs / 1000.0
+        let minLen = 0.010   // longitud mínima del loop: 10 ms
+        switch edge {
+        case .loopIn:
+            d.loopStart = min(max(0, d.loopStart + delta), d.loopEnd - minLen)
+        case .loopOut:
+            d.loopEnd = min(max(d.loopStart + minLen, d.loopEnd + delta), dur)
+        }
+        saveSession()
+    }
+
     // MARK: - Internos
 
     private func scheduleFromBeginning(file: AVAudioFile, deck: DeckID) {

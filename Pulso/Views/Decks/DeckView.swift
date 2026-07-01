@@ -422,61 +422,109 @@ struct LoopControlsView: View {
     @EnvironmentObject var audioEngine: AudioEngine
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Botón LOOP on/off
-            Button {
-                audioEngine.toggleLoop(deck: deck.id)
-            } label: {
-                Text("LOOP")
-                    .font(.caption.bold())
-                    .frame(width: 48, height: 28)
-                    .background(deck.isLooping ? Color.accentColor : Color.white.opacity(0.1))
-                    .foregroundStyle(deck.isLooping ? .white : .secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                // Botón LOOP on/off
+                Button {
+                    audioEngine.toggleLoop(deck: deck.id)
+                } label: {
+                    Text("LOOP")
+                        .font(.caption.bold())
+                        .frame(width: 48, height: 28)
+                        .background(deck.isLooping ? Color.accentColor : Color.white.opacity(0.1))
+                        .foregroundStyle(deck.isLooping ? .white : .secondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Activar/desactivar loop de 4 beats")
+
+                // Reducir loop a la mitad
+                Button {
+                    audioEngine.scaleLoop(deck: deck.id, factor: 0.5)
+                } label: {
+                    Text("½")
+                        .font(.caption.bold())
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.1))
+                        .foregroundStyle(.secondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .disabled(!deck.isLooping)
+                .help("Reducir loop a la mitad")
+
+                // Duplicar loop
+                Button {
+                    audioEngine.scaleLoop(deck: deck.id, factor: 2.0)
+                } label: {
+                    Text("×2")
+                        .font(.caption.bold())
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.1))
+                        .foregroundStyle(.secondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .disabled(!deck.isLooping)
+                .help("Doblar duración del loop")
+
+                Spacer()
+
+                // Duración del loop activo
+                if deck.isLooping {
+                    let length = deck.loopEnd - deck.loopStart
+                    Text(String(format: "%.0f ms", length * 1000))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
-            .buttonStyle(.plain)
-            .help("Activar/desactivar loop de 4 beats")
 
-            // Reducir loop a la mitad
-            Button {
-                audioEngine.scaleLoop(deck: deck.id, factor: 0.5)
-            } label: {
-                Text("½")
-                    .font(.caption.bold())
-                    .frame(width: 28, height: 28)
-                    .background(Color.white.opacity(0.1))
-                    .foregroundStyle(.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            .disabled(!deck.isLooping)
-            .help("Reducir loop a la mitad")
-
-            // Duplicar loop
-            Button {
-                audioEngine.scaleLoop(deck: deck.id, factor: 2.0)
-            } label: {
-                Text("×2")
-                    .font(.caption.bold())
-                    .frame(width: 28, height: 28)
-                    .background(Color.white.opacity(0.1))
-                    .foregroundStyle(.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            .disabled(!deck.isLooping)
-            .help("Doblar duración del loop")
-
-            Spacer()
-
-            // Duración del loop activo
+            // Ajuste fino IN/OUT en ms (solo con loop activo)
             if deck.isLooping {
-                let length = deck.loopEnd - deck.loopStart
-                Text(String(format: "%.2fs", length))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                LoopFineTuneView(deck: deck)
             }
+        }
+    }
+}
+
+/// Ajuste fino de los puntos del loop en milisegundos. Cada borde (In / Out) tiene −/+ con
+/// dos pasos: ±1 ms (clavado exacto) y ±10 ms (ajuste grueso). Guardas en el engine.
+struct LoopFineTuneView: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+
+    private func nudge(_ edge: AudioEngine.LoopEdge, _ ms: Double) {
+        audioEngine.nudgeLoopPoint(deck: deck.id, edge: edge, deltaMs: ms)
+    }
+
+    private func stepButton(_ label: String, _ edge: AudioEngine.LoopEdge, _ ms: Double) -> some View {
+        Button { nudge(edge, ms) } label: {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .frame(width: 30, height: 22)
+                .background(Color.white.opacity(0.1))
+                .foregroundStyle(.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("IN").font(.system(size: 9, weight: .bold)).foregroundStyle(.tertiary)
+            stepButton("−10", .loopIn, -10)
+            stepButton("−1",  .loopIn, -1)
+            stepButton("+1",  .loopIn, 1)
+            stepButton("+10", .loopIn, 10)
+
+            Spacer(minLength: 6)
+
+            Text("OUT").font(.system(size: 9, weight: .bold)).foregroundStyle(.tertiary)
+            stepButton("−10", .loopOut, -10)
+            stepButton("−1",  .loopOut, -1)
+            stepButton("+1",  .loopOut, 1)
+            stepButton("+10", .loopOut, 10)
         }
     }
 }
