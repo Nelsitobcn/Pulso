@@ -57,6 +57,18 @@ final class AudioEngine: ObservableObject {
     private var eqB     = AVAudioUnitEQ(numberOfBands: 3)
     private var faderB  = AVAudioMixerNode()
 
+    // STEMS: 4 players por deck (vocals/drums/bass/other) + un mixer sumador que converge
+    // ANTES del TimePitch. Así tempo/keylock/SYNC/EQ/crossfader operan sobre la suma y no
+    // cambian nada del pipeline existente. El mute por stem usa `player.volume`
+    // (AVAudioPlayerNode adopta AVAudioMixing; el volumen aplica en la entrada del mixer).
+    //
+    //   playerA ──────────────┐
+    //   stemPlayersA[0..3] ───┴→ stemSumA → pitchA → eqA → faderA → master
+    private var stemPlayersA: [AVAudioPlayerNode] = (0..<4).map { _ in AVAudioPlayerNode() }
+    private var stemPlayersB: [AVAudioPlayerNode] = (0..<4).map { _ in AVAudioPlayerNode() }
+    private var stemSumA = AVAudioMixerNode()
+    private var stemSumB = AVAudioMixerNode()
+
     private var masterMixer: AVAudioMixerNode { engine.mainMixerNode }
 
     // Canal de PREESCUCHA (cue): independiente de los decks. Suena una pista candidata
@@ -87,6 +99,11 @@ final class AudioEngine: ObservableObject {
     // Archivo cargado por deck
     private var fileA: AVAudioFile?
     private var fileB: AVAudioFile?
+
+    // Archivos de stems cargados por deck (índice = StemType.rawValue). Si != nil, el deck
+    // reproduce en MODO STEMS (los 4 stem players suenan; el player principal calla).
+    private var stemFilesA: [AVAudioFile]?
+    private var stemFilesB: [AVAudioFile]?
 
     // Tiempo de audio (segundos) donde se pausó — fuente de verdad
     private var pausedAtA: TimeInterval = 0
@@ -130,19 +147,23 @@ final class AudioEngine: ObservableObject {
     // MARK: - Grafo
 
     private func setupGraph() {
-        let nodesA: [AVAudioNode] = [playerA, pitchA, eqA, faderA]
-        let nodesB: [AVAudioNode] = [playerB, pitchB, eqB, faderB]
+        let nodesA: [AVAudioNode] = [playerA, stemSumA, pitchA, eqA, faderA] + stemPlayersA
+        let nodesB: [AVAudioNode] = [playerB, stemSumB, pitchB, eqB, faderB] + stemPlayersB
         let nodesPreview: [AVAudioNode] = [previewPlayer, previewMixer]
         (nodesA + nodesB + nodesPreview).forEach { engine.attach($0) }
 
-        // Deck A: player → pitch → eq → fader → master
-        engine.connect(playerA, to: pitchA,      format: nil)
+        // Deck A: (player + 4 stem players) → stemSum → pitch → eq → fader → master
+        engine.connect(playerA, to: stemSumA,    format: nil)
+        stemPlayersA.forEach { engine.connect($0, to: stemSumA, format: nil) }
+        engine.connect(stemSumA, to: pitchA,     format: nil)
         engine.connect(pitchA,  to: eqA,         format: nil)
         engine.connect(eqA,     to: faderA,      format: nil)
         engine.connect(faderA,  to: masterMixer, format: nil)
 
         // Deck B: igual
-        engine.connect(playerB, to: pitchB,      format: nil)
+        engine.connect(playerB, to: stemSumB,    format: nil)
+        stemPlayersB.forEach { engine.connect($0, to: stemSumB, format: nil) }
+        engine.connect(stemSumB, to: pitchB,     format: nil)
         engine.connect(pitchB,  to: eqB,         format: nil)
         engine.connect(eqB,     to: faderB,      format: nil)
         engine.connect(faderB,  to: masterMixer, format: nil)
@@ -225,6 +246,39 @@ final class AudioEngine: ObservableObject {
         // Volume de deck → fader (recalculando con crossfader)
         deckA.$volume.sink { [weak self] _ in self?.refreshFaders() }.store(in: &cancellables)
         deckB.$volume.sink { [weak self] _ in self?.refreshFaders() }.store(in: &cancellables)
+
+        // Mutes de stems → volumen del stem player (instantáneo, sin tocar el scheduling)
+        deckA.$stemVocalMuted .sink { [weak self] m in self?.stemPlayersA[StemType.vocal.rawValue].volume  = m ? 0 : 1 }.store(in: &cancellables)
+        deckA.$stemDrumsMuted .sink { [weak self] m in self?.stemPlayersA[StemType.drums.rawValue].volume  = m ? 0 : 1 }.store(in: &cancellables)
+        deckA.$stemBassMuted  .sink { [weak self] m in self?.stemPlayersA[StemType.bass.rawValue].volume   = m ? 0 : 1 }.store(in: &cancellables)
+        deckA.$stemMelodyMuted.sink { [weak self] m in self?.stemPlayersA[StemType.melody.rawValue].volume = m ? 0 : 1 }.store(in: &cancellables)
+        deckB.$stemVocalMuted .sink { [weak self] m in self?.stemPlayersB[StemType.vocal.rawValue].volume  = m ? 0 : 1 }.store(in: &cancellables)
+        deckB.$stemDrumsMuted .sink { [weak self] m in self?.stemPlayersB[StemType.drums.rawValue].volume  = m ? 0 : 1 }.store(in: &cancellables)
+        deckB.$stemBassMuted  .sink { [weak self] m in self?.stemPlayersB[StemType.bass.rawValue].volume   = m ? 0 : 1 }.store(in: &cancellables)
+        deckB.$stemMelodyMuted.sink { [weak self] m in self?.stemPlayersB[StemType.melody.rawValue].volume = m ? 0 : 1 }.store(in: &cancellables)
+    }
+
+    // MARK: - Helpers de stems
+
+    private func stemFiles(for deck: DeckID) -> [AVAudioFile]? {
+        deck == .left ? stemFilesA : stemFilesB
+    }
+
+    private func stemPlayers(for deck: DeckID) -> [AVAudioPlayerNode] {
+        deck == .left ? stemPlayersA : stemPlayersB
+    }
+
+    /// `true` si el deck reproduce en modo stems (4 players) en vez del player principal.
+    private func stemsActive(for deck: DeckID) -> Bool {
+        stemFiles(for: deck) != nil
+    }
+
+    /// Para el deck: player principal + los 4 stem players. `stop()` sobre un player sin nada
+    /// programado es inocuo, así que siempre paramos los 5 (evita ramas según el modo).
+    private func stopAllPlayers(deck: DeckID) {
+        let main = deck == .left ? playerA : playerB
+        main.stop()
+        stemPlayers(for: deck).forEach { $0.stop() }
     }
 
     private static func knobToGain(_ knob: Double) -> Float {
@@ -259,16 +313,30 @@ final class AudioEngine: ObservableObject {
     // MARK: - API pública
 
     func load(track: Track, into deck: DeckID) {
-        let player    = deck == .left ? playerA : playerB
-        let deckState = deck == .left ? deckA   : deckB
+        let deckState = deck == .left ? deckA : deckB
 
-        if player.isPlaying { player.stop() }
+        stopAllPlayers(deck: deck)
         stopTimer(deck: deck)
         if deck == .left { pausedAtA = 0 } else { pausedAtB = 0 }
 
         do {
             let file = try AVAudioFile(forReading: track.url)
             if deck == .left { fileA = file } else { fileB = file }
+
+            // STEMS: si los 4 archivos existen en disco, el deck entra en modo stems.
+            // Los AVAudioFile de stems se abren aquí (una vez por carga, no por schedule).
+            var stems: [AVAudioFile]? = nil
+            if let stemURLs = StemStore.urls(for: track.id) {
+                stems = try? stemURLs.map { try AVAudioFile(forReading: $0) }
+            }
+            if deck == .left { stemFilesA = stems } else { stemFilesB = stems }
+            deckState.stemsAvailable = stems != nil
+            deckState.stemError = nil
+            // Pista nueva → los 4 stems suenan (mutes a off; los sinks reponen volume=1).
+            deckState.stemVocalMuted  = false
+            deckState.stemDrumsMuted  = false
+            deckState.stemBassMuted   = false
+            deckState.stemMelodyMuted = false
 
             scheduleFromBeginning(file: file, deck: deck)
 
@@ -293,8 +361,7 @@ final class AudioEngine: ObservableObject {
     }
 
     func togglePlay(deck: DeckID) {
-        let player    = deck == .left ? playerA : playerB
-        let deckState = deck == .left ? deckA   : deckB
+        let deckState = deck == .left ? deckA : deckB
         guard deckState.track != nil else { return }
 
         if deckState.isPlaying {
@@ -308,7 +375,7 @@ final class AudioEngine: ObservableObject {
             if phaseLockSlave == deck || (phaseLockSlave != nil && phaseLockSlave != deck) {
                 stopPhaseLock()
             }
-            player.stop()
+            stopAllPlayers(deck: deck)
             stopTimer(deck: deck)
             deckState.isPlaying = false
             saveSession()
@@ -323,8 +390,7 @@ final class AudioEngine: ObservableObject {
         let deckState = deck == .left ? deckA : deckB
         guard deckState.track != nil else { return }
         let wasPlaying = deckState.isPlaying
-        let player = deck == .left ? playerA : playerB
-        player.stop()
+        stopAllPlayers(deck: deck)
         stopTimer(deck: deck)
         if deck == .left { pausedAtA = time } else { pausedAtB = time }
         deckState.currentTime = time
@@ -344,12 +410,11 @@ final class AudioEngine: ObservableObject {
     /// mover la onda no dispare glitches. NO reprograma en cada frame (eso lo hace `endScrub`).
     func beginScrub(deck: DeckID) {
         let deckState = deck == .left ? deckA : deckB
-        let player = deck == .left ? playerA : playerB
         let wasPlaying = deckState.isPlaying
         if deck == .left { scrubWasPlayingA = wasPlaying } else { scrubWasPlayingB = wasPlaying }
         // Soltar el phase-lock si este deck participaba (el DJ está tomando control manual).
         if phaseLockSlave != nil { stopPhaseLock() }
-        player.stop()
+        stopAllPlayers(deck: deck)
         stopTimer(deck: deck)
         deckState.isPlaying = false
     }
@@ -387,7 +452,7 @@ final class AudioEngine: ObservableObject {
         let targetFrame = AVAudioFramePosition(max(0, time) * sr)
         guard targetFrame < file.length else { return }
 
-        player.stop()
+        stopAllPlayers(deck: deck)
         scheduleSegment(file: file, from: targetFrame, deck: deck)
 
         // Reaplicar rate/pitch antes de play para asegurar que está activo
@@ -395,17 +460,32 @@ final class AudioEngine: ObservableObject {
         pitch.rate  = Float(rate)
         pitch.pitch = deckState.keyLock ? 0 : Float(-1200.0 * log2(rate))
 
-        player.play()
+        // Arranque. En modo stems los 4 players deben arrancar en el MISMO instante de
+        // hardware: play() secuencial los desalinearía unos ms entre sí. play(at:) con un
+        // hostTime común (+ colchón de 30 ms para que los 4 lleguen) garantiza que salen
+        // muestra-alineados del mixer sumador.
+        let startDelay: TimeInterval
+        if stemsActive(for: deck) {
+            startDelay = 0.03
+            let startHost = mach_absolute_time() + AVAudioTime.hostTime(forSeconds: startDelay)
+            let startTime = AVAudioTime(hostTime: startHost)
+            stemPlayers(for: deck).forEach { $0.play(at: startTime) }
+        } else {
+            startDelay = 0
+            player.play()
+        }
 
-        // Registrar el momento de inicio para el timer
+        // Registrar el momento de inicio para el timer. El colchón de stems se SUMA a la
+        // base de tiempo: si no, currentAudioTime adelantaría 30 ms la posición real y el
+        // phase-lock del SYNC corregiría un desfase fantasma.
         let tempo = deckState.tempo
         if deck == .left {
             pausedAtA    = time
-            playHostTimeA = CACurrentMediaTime()
+            playHostTimeA = CACurrentMediaTime() + startDelay
             playTempoA   = tempo
         } else {
             pausedAtB    = time
-            playHostTimeB = CACurrentMediaTime()
+            playHostTimeB = CACurrentMediaTime() + startDelay
             playTempoB   = tempo
         }
 
@@ -742,6 +822,67 @@ final class AudioEngine: ObservableObject {
         saveSession()
     }
 
+    // MARK: - Stems (separación y recarga)
+
+    /// Lanza la separación de stems de la pista cargada en `deck` (demucs-mlx en background).
+    /// Al terminar, recarga el deck en MODO STEMS manteniendo posición y estado de play.
+    func separateStems(deck: DeckID) {
+        let deckState = deck == .left ? deckA : deckB
+        guard let track = deckState.track, !deckState.isSeparatingStems else { return }
+        guard !deckState.stemsAvailable else { return }
+
+        deckState.isSeparatingStems = true
+        deckState.stemError = nil
+
+        Task { [weak self] in
+            do {
+                _ = try await StemSeparator.shared.separate(trackURL: track.url, trackID: track.id)
+                await MainActor.run {
+                    guard let self else { return }
+                    let d = deck == .left ? self.deckA : self.deckB
+                    d.isSeparatingStems = false
+                    // Solo activar si el deck sigue con la MISMA pista (pudo cambiar durante
+                    // la separación). Si cambió, los stems quedan en caché para la próxima.
+                    guard d.track?.id == track.id else { return }
+                    self.activateStems(deck: deck, trackID: track.id)
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self else { return }
+                    let d = deck == .left ? self.deckA : self.deckB
+                    d.isSeparatingStems = false
+                    d.stemError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Abre los AVAudioFile de stems y conmuta el deck a modo stems EN CALIENTE:
+    /// congela la posición actual, reprograma y (si sonaba) reanuda en el mismo punto.
+    private func activateStems(deck: DeckID, trackID: UUID) {
+        let deckState = deck == .left ? deckA : deckB
+        guard let urls = StemStore.urls(for: trackID) else { return }
+        guard let files = try? urls.map({ try AVAudioFile(forReading: $0) }) else {
+            deckState.stemError = "No se pudieron abrir los archivos de stems."
+            return
+        }
+
+        let wasPlaying = deckState.isPlaying
+        let t = wasPlaying ? currentAudioTime(deck: deck) : deckState.currentTime
+
+        stopAllPlayers(deck: deck)
+        stopTimer(deck: deck)
+
+        if deck == .left { stemFilesA = files; pausedAtA = t } else { stemFilesB = files; pausedAtB = t }
+        deckState.stemsAvailable = true
+        deckState.currentTime = t
+        deckState.isPlaying = false
+
+        if wasPlaying {
+            startPlayback(from: t, deck: deck)
+        }
+    }
+
     // MARK: - Preescucha (cue) por canal propio
 
     /// Reproduce un archivo LOCAL por el canal de preescucha (auditioning tipo Rekordbox):
@@ -891,13 +1032,44 @@ final class AudioEngine: ObservableObject {
         let d      = deck == .left ? deckA   : deckB
         guard frame < file.length else { return }
 
-        let count = AVAudioFrameCount(file.length - frame)
         // Incrementar el token: este es ahora el segmento vigente para este deck.
         let myToken: Int
         if deck == .left { segmentTokenA += 1; myToken = segmentTokenA }
         else             { segmentTokenB += 1; myToken = segmentTokenB }
 
-        // Usar AVAudioTime proporcionado (para sincronización en fase) o nil (inicio inmediato)
+        // ── MODO STEMS: programar los 4 stem players en la MISMA posición temporal ──
+        // El frame se recalcula por archivo (el sample rate del stem puede diferir del
+        // original). El callback de fin va solo en el stem 0 (vocals): los 4 duran lo mismo.
+        if let stems = stemFiles(for: deck) {
+            let time = Double(frame) / file.processingFormat.sampleRate
+            let players = stemPlayers(for: deck)
+            for (i, stemFile) in stems.enumerated() {
+                let sFrame = AVAudioFramePosition(time * stemFile.processingFormat.sampleRate)
+                guard sFrame < stemFile.length else { continue }
+                let sCount = AVAudioFrameCount(stemFile.length - sFrame)
+                if i == StemType.vocal.rawValue {
+                    players[i].scheduleSegment(stemFile, startingFrame: sFrame, frameCount: sCount,
+                                               at: avTime, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                        Task { @MainActor [weak self] in
+                            guard let self, !d.isLooping else { return }
+                            let currentToken = deck == .left ? self.segmentTokenA : self.segmentTokenB
+                            guard myToken == currentToken else { return }
+                            d.isPlaying = false
+                            self.stopTimer(deck: deck)
+                            if deck == .left { self.pausedAtA = 0; self.playHostTimeA = 0 }
+                            else             { self.pausedAtB = 0; self.playHostTimeB = 0 }
+                        }
+                    }
+                } else {
+                    players[i].scheduleSegment(stemFile, startingFrame: sFrame, frameCount: sCount,
+                                               at: avTime)
+                }
+            }
+            return
+        }
+
+        // ── MODO NORMAL: un solo player con el archivo original ──
+        let count = AVAudioFrameCount(file.length - frame)
         player.scheduleSegment(file, startingFrame: frame, frameCount: count, at: avTime,
                                completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor [weak self] in

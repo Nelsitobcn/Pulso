@@ -45,6 +45,12 @@ final class DeckState: ObservableObject, Identifiable {
     @Published var stemBassMuted: Bool = false
     @Published var stemDrumsMuted: Bool = false
     @Published var stemMelodyMuted: Bool = false
+    /// `true` si la pista cargada tiene los 4 stems en disco y el deck reproduce en modo stems.
+    @Published var stemsAvailable: Bool = false
+    /// `true` mientras demucs-mlx está separando la pista de este deck (spinner en UI).
+    @Published var isSeparatingStems: Bool = false
+    /// Último error de separación (se muestra bajo el botón STEMS).
+    @Published var stemError: String?
 
     var bpmDisplay: String {
         guard let bpm = track?.bpm else { return "---" }

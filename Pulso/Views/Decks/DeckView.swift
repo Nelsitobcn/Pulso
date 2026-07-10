@@ -39,6 +39,9 @@ struct DeckView: View {
             // Controles de transporte
             TransportControlsView(deck: deck)
 
+            // Stems: mute en vivo por pista (VOX/DRM/BASS/MEL) o botón para separarlos
+            StemControlsView(deck: deck)
+
             // EQ
             EQView(deck: deck)
 
@@ -359,6 +362,76 @@ struct TransportControlsView: View {
             .buttonStyle(.plain)
         }
         .foregroundStyle(.white)
+    }
+}
+
+/// Controles de STEMS del deck. Tres estados:
+///  1. Pista con stems separados → 4 botones de mute en vivo (VOX/DRM/BASS/MEL).
+///  2. Separando → spinner con texto.
+///  3. Pista sin stems → botón "STEMS" que lanza demucs-mlx en background.
+struct StemControlsView: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if deck.stemsAvailable {
+                StemMuteButton(label: "VOX",  isMuted: $deck.stemVocalMuted)
+                StemMuteButton(label: "DRM",  isMuted: $deck.stemDrumsMuted)
+                StemMuteButton(label: "BASS", isMuted: $deck.stemBassMuted)
+                StemMuteButton(label: "MEL",  isMuted: $deck.stemMelodyMuted)
+            } else if deck.isSeparatingStems {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Separando stems…")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            } else if deck.track != nil {
+                Button {
+                    audioEngine.separateStems(deck: deck.id)
+                } label: {
+                    Label("STEMS", systemImage: "square.stack.3d.up")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .help("Separar en 4 stems (voces, batería, bajo, melodía) con IA local")
+
+                if let err = deck.stemError {
+                    Text(err)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+        .frame(height: 26)
+        .animation(.easeInOut(duration: 0.15), value: deck.stemsAvailable)
+        .animation(.easeInOut(duration: 0.15), value: deck.isSeparatingStems)
+    }
+}
+
+/// Botón de mute de un stem: encendido (acento) = suena; apagado (gris) = muteado.
+struct StemMuteButton: View {
+    let label: String
+    @Binding var isMuted: Bool
+
+    var body: some View {
+        Button {
+            isMuted.toggle()
+        } label: {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isMuted ? Color.gray.opacity(0.25) : Color.accentColor.opacity(0.85))
+                )
+                .foregroundColor(isMuted ? .secondary : .white)
+        }
+        .buttonStyle(.plain)
+        .help(isMuted ? "Activar \(label)" : "Mutear \(label)")
     }
 }
 
