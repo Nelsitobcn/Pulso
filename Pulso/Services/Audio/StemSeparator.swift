@@ -137,10 +137,15 @@ actor StemSeparator {
         }
 
         // 2. Separación. Salida: <workDir>/htdemucs/<nombre-sin-ext>/{vocals,drums,bass,other}.wav
+        // --prefetch-tracks 0 --write-workers 1: el modo multihilo de demucs-mlx 1.4.4
+        // crashea con MLX 0.31+ ("There is no Stream(gpu, 1) in current thread") porque
+        // evalúa tensores GPU desde un hilo secundario. Con 1 pista no perdemos nada.
         _ = try await Self.run(executable: demucs, arguments: [
             inputWav.path,
             "-n", "htdemucs",
-            "-o", workDir.path
+            "-o", workDir.path,
+            "--prefetch-tracks", "0",
+            "--write-workers", "1"
         ])
 
         let baseName = inputWav.deletingPathExtension().lastPathComponent
