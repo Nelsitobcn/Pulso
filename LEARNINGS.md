@@ -27,7 +27,8 @@
 **Bug 1**: la cabecera mostraba el deck que suena, pero «Sugerir» siempre calculaba sobre el deck A, y el botón cargaba siempre en B (aunque B estuviera sonando → reemplazaba la pista en el aire).
 **Fix 1**: `AudioEngine.onAirDeck` / `nextDeck` como fuente única para cabecera, cálculo y destino de carga.
 **Bug 2**: el panel inferior tenía 280 px de alto máximo y la caja del DJ IA se los comía: la lista de la biblioteca quedaba a 0 px tras pulsar Sugerir.
-**Fix 2**: sugerencias en `ScrollView` (76–120 px) y panel inferior a 400 px máximo.
+**Fix 2**: sugerencias en `ScrollView` con alto según filas (máx. 120 px) y panel inferior a 400 px máximo.
+**Revisión PR #6**: (a) `@Published` emite en willSet: un sink que relee la propiedad ve el valor VIEJO → en `sync()` se escribe `deck.tempo` ANTES de fijar rate/pitch; (b) con los dos decks sonando, «On Air» lo decide el crossfader y `loadIntoFreeDeck` no carga si el deck libre también suena.
 
 ### [2026-10-15] — Cómo verificar Pulso clicando sin pelear con el foco
 - `screencapture -l <windowID>` captura solo la ventana de Pulso, esté en el monitor que esté (coordenadas de la imagen = puntos si el monitor es 1x).

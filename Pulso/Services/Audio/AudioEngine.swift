@@ -453,6 +453,7 @@ final class AudioEngine: ObservableObject {
     /// Deck "On Air": el que suena (si suenan los dos o ninguno, prioriza A si tiene pista).
     /// Fuente única para el DJ IA: sobre qué pista se sugiere y a qué deck va lo sugerido.
     var onAirDeck: DeckID? {
+        if deckA.isPlaying && deckB.isPlaying { return crossfader > 0.5 ? .right : .left }
         if deckA.isPlaying { return .left }
         if deckB.isPlaying { return .right }
         if deckA.track != nil { return .left }
@@ -464,6 +465,16 @@ final class AudioEngine: ObservableObject {
     /// Así una sugerencia nunca sustituye a la pista que está sonando.
     var nextDeck: DeckID { onAirDeck == .right ? .left : .right }
 
+    /// Carga en el deck libre. Si ese deck también está sonando (mezcla en curso), NO hace nada:
+    /// cortar una pista en el aire es peor que no cargar. Devuelve si cargó.
+    @discardableResult
+    func loadIntoFreeDeck(_ track: Track) -> Bool {
+        let target = nextDeck
+        guard !(target == .left ? deckA : deckB).isPlaying else { return false }
+        load(track: track, into: target)
+        return true
+    }
+
     func sync(slave: DeckID) {
         let masterDeck = slave == .left ? deckB : deckA
         let slaveDeck  = slave == .left ? deckA : deckB
@@ -474,6 +485,11 @@ final class AudioEngine: ObservableObject {
               slaveBPM > 0 else { return }
 
         let newRate = masterBPM / slaveBPM
+
+        // PRIMERO el estado: `$tempo` emite en willSet y su sink (updateTimePitch) relee el tempo
+        // VIEJO. Si se escribiera al final, pisaría rate/pitch recién puestos (con el eco del
+        // slider ya ignorado, el tono se quedaba mal con keylock apagado — revisión PR #6).
+        slaveDeck.tempo = newRate  // actualiza UI (bpmDisplay)
 
         // Aplicar tempo al nodo de audio del slave
         slavePitch.rate  = Float(newRate)
@@ -488,7 +504,6 @@ final class AudioEngine: ObservableObject {
                 pausedAtB = currentT; playHostTimeB = CACurrentMediaTime(); playTempoB = newRate
             }
         }
-        slaveDeck.tempo = newRate  // actualiza UI (bpmDisplay)
         saveSession()
 
         // Si ambos suenan, activar el PHASE-LOCK continuo. La investigación (NotebookLM
