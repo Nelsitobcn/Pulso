@@ -17,6 +17,25 @@
 
 ---
 
+### [2026-10-15] — SYNC igualaba el BPM pero NUNCA enganchaba la fase
+**Bug**: tras pulsar SYNC con los dos decks sonando, las marcas de fase del panel se separaban ~5 % de beat por segundo; la barra nunca se ponía verde.
+**Causa**: `sync()` escribe `deck.tempo` → el `.onChange` del slider de pitch llama a `applyTempo` con ese mismo valor → el «árbitro» (tocar el pitch suelta el SYNC) creía que era el DJ y llamaba a `stopPhaseLock()` justo después de arrancarlo.
+**Fix**: `phaseLockBaseRate` guarda el tempo que fijó el SYNC; `applyTempo` ignora el eco con ese valor exacto. Mover el pitch a mano sigue soltando el SYNC (probado).
+**Regla**: un `.onChange` sobre un valor que también escribe el motor NO distingue usuario de programa. Si el handler tiene efectos (soltar un lock), filtrar el eco.
+
+### [2026-10-15] — DJ IA: «Sobre: X» mentía y la biblioteca desaparecía
+**Bug 1**: la cabecera mostraba el deck que suena, pero «Sugerir» siempre calculaba sobre el deck A, y el botón cargaba siempre en B (aunque B estuviera sonando → reemplazaba la pista en el aire).
+**Fix 1**: `AudioEngine.onAirDeck` / `nextDeck` como fuente única para cabecera, cálculo y destino de carga.
+**Bug 2**: el panel inferior tenía 280 px de alto máximo y la caja del DJ IA se los comía: la lista de la biblioteca quedaba a 0 px tras pulsar Sugerir.
+**Fix 2**: sugerencias en `ScrollView` con alto según filas (máx. 120 px) y panel inferior a 400 px máximo.
+**Revisión PR #6**: (a) `@Published` emite en willSet: un sink que relee la propiedad ve el valor VIEJO → en `sync()` se escribe `deck.tempo` ANTES de fijar rate/pitch; (b) con los dos decks sonando, «On Air» lo decide el crossfader y `loadIntoFreeDeck` no carga si el deck libre también suena.
+
+### [2026-10-15] — Cómo verificar Pulso clicando sin pelear con el foco
+- `screencapture -l <windowID>` captura solo la ventana de Pulso, esté en el monitor que esté (coordenadas de la imagen = puntos si el monitor es 1x).
+- El árbol de accesibilidad (AXUIElement) da el centro exacto de cada botón y lee BPM, key, «2495 ms», valor de sliders (posición de la preescucha, pitch). Herramienta: un `ax.swift` de ~60 líneas (dump / press).
+- El PRIMER clic en una ventana que no está al frente solo la activa (SwiftUI no acepta «first mouse»): poner Pulso al frente antes de clicar o arrastrar.
+- La ventana de Pulso mide como mínimo ~1107 pt de alto: en el iPad como pantalla (980 pt) no cabe entera.
+
 ### [2026-07-01] — Panel beatmatch "bloques gruesos" al ampliar: era sobre-muestreo, no grosor
 **Bug**: la onda ampliada del panel central se veía como bloques macizos aunque cada barra se dibujaba a 1px.
 **Causa (medida)**: el panel amplía ~6s en ~1400px, pero el `waveformDetail` general (3000 cols para 222s) solo aporta **~81 columnas** en esa ventana → cada columna de dato se estira ~17px = bloque. No era el grosor de dibujo, era falta de resolución de datos AL AMPLIAR. Guardar ~52.000 cols/pista (1px por columna a esa escala) es inviable en disco.

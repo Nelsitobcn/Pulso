@@ -422,6 +422,10 @@ final class AudioEngine: ObservableObject {
         // de un SYNC activo, el timer del phase-lock lo pisaría 10×/seg ("lo hace muy mal").
         // Comportamiento CDJ estándar: tocar el pitch a mano DESENGANCHA el sync de ese deck.
         if phaseLockSlave == deck {
+            // El propio SYNC escribe `deck.tempo` → el .onChange del slider llama aquí con ese
+            // MISMO valor. No es el DJ moviendo el pitch: ignorarlo, o el SYNC soltaría el
+            // phase-lock que acaba de arrancar (bug E2E 15-oct: SYNC igualaba BPM pero nunca fase).
+            if let base = phaseLockBaseRate, abs(newRate - base) < 1e-9 { return }
             stopPhaseLock(restoreBaseRate: false)  // no restaurar: el slider manda ahora
         }
 
@@ -446,6 +450,31 @@ final class AudioEngine: ObservableObject {
         }
     }
 
+    /// Deck "On Air": el que suena (si suenan los dos o ninguno, prioriza A si tiene pista).
+    /// Fuente única para el DJ IA: sobre qué pista se sugiere y a qué deck va lo sugerido.
+    var onAirDeck: DeckID? {
+        if deckA.isPlaying && deckB.isPlaying { return crossfader > 0.5 ? .right : .left }
+        if deckA.isPlaying { return .left }
+        if deckB.isPlaying { return .right }
+        if deckA.track != nil { return .left }
+        if deckB.track != nil { return .right }
+        return nil
+    }
+
+    /// Deck donde cargar la siguiente canción: el contrario al On Air (B si no hay nada).
+    /// Así una sugerencia nunca sustituye a la pista que está sonando.
+    var nextDeck: DeckID { onAirDeck == .right ? .left : .right }
+
+    /// Carga en el deck libre. Si ese deck también está sonando (mezcla en curso), NO hace nada:
+    /// cortar una pista en el aire es peor que no cargar. Devuelve si cargó.
+    @discardableResult
+    func loadIntoFreeDeck(_ track: Track) -> Bool {
+        let target = nextDeck
+        guard !(target == .left ? deckA : deckB).isPlaying else { return false }
+        load(track: track, into: target)
+        return true
+    }
+
     func sync(slave: DeckID) {
         let masterDeck = slave == .left ? deckB : deckA
         let slaveDeck  = slave == .left ? deckA : deckB
@@ -456,6 +485,11 @@ final class AudioEngine: ObservableObject {
               slaveBPM > 0 else { return }
 
         let newRate = masterBPM / slaveBPM
+
+        // PRIMERO el estado: `$tempo` emite en willSet y su sink (updateTimePitch) relee el tempo
+        // VIEJO. Si se escribiera al final, pisaría rate/pitch recién puestos (con el eco del
+        // slider ya ignorado, el tono se quedaba mal con keylock apagado — revisión PR #6).
+        slaveDeck.tempo = newRate  // actualiza UI (bpmDisplay)
 
         // Aplicar tempo al nodo de audio del slave
         slavePitch.rate  = Float(newRate)
@@ -470,7 +504,6 @@ final class AudioEngine: ObservableObject {
                 pausedAtB = currentT; playHostTimeB = CACurrentMediaTime(); playTempoB = newRate
             }
         }
-        slaveDeck.tempo = newRate  // actualiza UI (bpmDisplay)
         saveSession()
 
         // Si ambos suenan, activar el PHASE-LOCK continuo. La investigación (NotebookLM
@@ -498,6 +531,8 @@ final class AudioEngine: ObservableObject {
 
     private var phaseLockTimer: AnyCancellable?
     private var phaseLockSlave: DeckID?
+    /// Tempo base que el SYNC fijó al slave (para distinguir el eco del slider de un cambio manual).
+    private var phaseLockBaseRate: Double?
 
     /// Fase de reproducción respecto al BEATGRID REAL (no contra t=0).
     /// `fileTime` es la posición actual en tiempo de archivo (segundos). Devuelve:
@@ -546,6 +581,7 @@ final class AudioEngine: ObservableObject {
     private func startPhaseLock(slave: DeckID, baseRate: Double) {
         stopPhaseLock()
         phaseLockSlave = slave
+        phaseLockBaseRate = baseRate
         let master: DeckID = slave == .left ? .right : .left
         let slavePitch = slave == .left ? pitchA : pitchB
 
@@ -664,6 +700,7 @@ final class AudioEngine: ObservableObject {
             }
         }
         phaseLockSlave = nil
+        phaseLockBaseRate = nil
     }
 
     /// Comportamiento CDJ: si reproduciendo → marca cue; si pausado → salta al cue marcado
