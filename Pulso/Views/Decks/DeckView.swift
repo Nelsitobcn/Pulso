@@ -360,6 +360,26 @@ struct TransportControlsView: View {
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
+
+            // KEY SYNC: casa la key (Camelot) con la del otro deck vía keyShift.
+            // Long press = quitar el shift.
+            Button {
+                audioEngine.syncKey(deck: deck.id)
+            } label: {
+                VStack(spacing: 0) {
+                    Text("KEY")
+                    Text("SYNC")
+                }
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 44, height: 36)
+                .background(deck.keyShift != 0 ? Color.purple.opacity(0.85) : Color.white.opacity(0.1))
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                audioEngine.resetKeyShift(deck: deck.id)
+            })
+            .help("Igualar tonalidad con el otro deck (long press: quitar shift)")
         }
         .foregroundStyle(.white)
     }
@@ -541,6 +561,14 @@ struct LoopControlsView: View {
                 .disabled(!deck.isLooping)
                 .help("Doblar duración del loop")
 
+                Spacer(minLength: 6)
+
+                // Beat jump: saltos exactos en el grid sin perder el beatmatch.
+                BeatJumpButton(deck: deck, beats: -8, label: "◀8")
+                BeatJumpButton(deck: deck, beats: -4, label: "◀4")
+                BeatJumpButton(deck: deck, beats: 4,  label: "4▶")
+                BeatJumpButton(deck: deck, beats: 8,  label: "8▶")
+
                 Spacer()
 
                 // Duración del loop activo
@@ -558,6 +586,30 @@ struct LoopControlsView: View {
                 LoopFineTuneView(deck: deck)
             }
         }
+    }
+}
+
+/// Botón de beat jump (±4/±8 beats sobre el grid, sin pausa).
+struct BeatJumpButton: View {
+    @ObservedObject var deck: DeckState
+    @EnvironmentObject var audioEngine: AudioEngine
+    let beats: Int
+    let label: String
+
+    var body: some View {
+        Button {
+            audioEngine.beatJump(deck: deck.id, beats: beats)
+        } label: {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .frame(width: 30, height: 28)
+                .background(Color.white.opacity(0.1))
+                .foregroundStyle(.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .disabled(deck.track?.bpm == nil)
+        .help("Saltar \(beats > 0 ? "+" : "")\(beats) beats")
     }
 }
 

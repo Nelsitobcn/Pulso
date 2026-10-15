@@ -8,6 +8,8 @@ struct EQView: View {
             EQKnob(label: "LOW", value: $deck.eqLow, color: .blue)
             EQKnob(label: "MID", value: $deck.eqMid, color: .green)
             EQKnob(label: "HIGH", value: $deck.eqHigh, color: .orange)
+            // Filtro DJ estilo Pioneer: izquierda = low-pass, derecha = high-pass, centro = off.
+            EQKnob(label: "FILTER", value: $deck.filter, color: .purple)
         }
     }
 }

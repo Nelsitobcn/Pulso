@@ -18,6 +18,9 @@ final class AudioEngine: ObservableObject {
         var loopEnd: TimeInterval
         var keyLock: Bool
         var hotCues: [HotCue]
+        // Ola 2 — opcionales para poder decodificar snapshots anteriores.
+        var filter: Double?
+        var keyShift: Int?
     }
 
     private struct SessionSnapshot: Codable {
@@ -56,6 +59,28 @@ final class AudioEngine: ObservableObject {
     private var pitchB  = AVAudioUnitTimePitch()
     private var eqB     = AVAudioUnitEQ(numberOfBands: 3)
     private var faderB  = AVAudioMixerNode()
+
+    // Ola 2 — Filtro DJ por deck (1 banda, LPF/HPF según signo del knob) post-fader.
+    private var filterA = AVAudioUnitEQ(numberOfBands: 1)
+    private var filterB = AVAudioUnitEQ(numberOfBands: 1)
+
+    // Ola 2 — Bus master propio + peak limiter antes del mainMixerNode: al sumar dos decks
+    // a volumen alto sin limiter hay clipping digital. mainMixerNode queda como volumen master.
+    private var masterBus = AVAudioMixerNode()
+    private let limiter = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
+        componentType: kAudioUnitType_Effect,
+        componentSubType: kAudioUnitSubType_PeakLimiter,
+        componentManufacturer: kAudioUnitManufacturer_Apple,
+        componentFlags: 0, componentFlagsMask: 0))
+
+    // Ola 2 — Grabación del set (tap post-limiter → WAV en ~/Music/Pulso Recordings).
+    @Published var isRecording = false
+    @Published var lastRecordingURL: URL?
+    private var activeRecorder: StreamRecorder?
+
+    // Ola 2 — VU real: el tap (hilo de render) deja el RMS aquí; el timer de UI lo lee.
+    private let vuBoxA = VULevelBox()
+    private let vuBoxB = VULevelBox()
 
     // STEMS: 4 players por deck (vocals/drums/bass/other) + un mixer sumador que converge
     // ANTES del TimePitch. Así tempo/keylock/SYNC/EQ/crossfader operan sobre la suma y no
@@ -147,18 +172,20 @@ final class AudioEngine: ObservableObject {
     // MARK: - Grafo
 
     private func setupGraph() {
-        let nodesA: [AVAudioNode] = [playerA, stemSumA, pitchA, eqA, faderA] + stemPlayersA
-        let nodesB: [AVAudioNode] = [playerB, stemSumB, pitchB, eqB, faderB] + stemPlayersB
+        let nodesA: [AVAudioNode] = [playerA, stemSumA, pitchA, eqA, faderA, filterA] + stemPlayersA
+        let nodesB: [AVAudioNode] = [playerB, stemSumB, pitchB, eqB, faderB, filterB] + stemPlayersB
         let nodesPreview: [AVAudioNode] = [previewPlayer, previewMixer]
-        (nodesA + nodesB + nodesPreview).forEach { engine.attach($0) }
+        let nodesMaster: [AVAudioNode] = [masterBus, limiter]
+        (nodesA + nodesB + nodesPreview + nodesMaster).forEach { engine.attach($0) }
 
-        // Deck A: (player + 4 stem players) → stemSum → pitch → eq → fader → master
+        // Deck A: (player + 4 stem players) → stemSum → pitch → eq → fader → filter → masterBus
         engine.connect(playerA, to: stemSumA,    format: nil)
         stemPlayersA.forEach { engine.connect($0, to: stemSumA, format: nil) }
         engine.connect(stemSumA, to: pitchA,     format: nil)
         engine.connect(pitchA,  to: eqA,         format: nil)
         engine.connect(eqA,     to: faderA,      format: nil)
-        engine.connect(faderA,  to: masterMixer, format: nil)
+        engine.connect(faderA,  to: filterA,     format: nil)
+        engine.connect(filterA, to: masterBus,   format: nil)
 
         // Deck B: igual
         engine.connect(playerB, to: stemSumB,    format: nil)
@@ -166,7 +193,20 @@ final class AudioEngine: ObservableObject {
         engine.connect(stemSumB, to: pitchB,     format: nil)
         engine.connect(pitchB,  to: eqB,         format: nil)
         engine.connect(eqB,     to: faderB,      format: nil)
-        engine.connect(faderB,  to: masterMixer, format: nil)
+        engine.connect(faderB,  to: filterB,     format: nil)
+        engine.connect(filterB, to: masterBus,   format: nil)
+
+        // Bus master: suma de decks → limiter → mainMixerNode (volumen master).
+        engine.connect(masterBus, to: limiter,    format: nil)
+        engine.connect(limiter,   to: masterMixer, format: nil)
+
+        // Filtros DJ arrancan en bypass (knob al centro).
+        Self.applyFilter(0, to: filterA)
+        Self.applyFilter(0, to: filterB)
+
+        // VU real: tap post-fader por deck (el timer de UI lee las cajas).
+        installVUTap(on: faderA, box: vuBoxA)
+        installVUTap(on: faderB, box: vuBoxB)
 
         // Canal de preescucha: previewPlayer → previewMixer → master.
         // Va directo al master (sin EQ/crossfader): es un cue, no un deck.
@@ -210,6 +250,54 @@ final class AudioEngine: ObservableObject {
         eq.bands[2].frequency  = 8000
         eq.bands[2].gain       = 0
         eq.bands[2].bypass     = false
+    }
+
+    // MARK: - Filtro DJ / VU / pitch (Ola 2)
+
+    /// Mapa del knob FILTER (−1…+1) a la banda del EQ: negativo = low-pass sweep
+    /// 20 kHz→200 Hz, positivo = high-pass sweep 20 Hz→8 kHz, centro = bypass.
+    private static func applyFilter(_ v: Double, to eq: AVAudioUnitEQ) {
+        let band = eq.bands[0]
+        guard abs(v) >= 0.03 else { band.bypass = true; return }
+        band.bypass = false
+        band.bandwidth = 0.7
+        band.gain = 0
+        if v < 0 {
+            band.filterType = .resonantLowPass
+            band.frequency = Float(20_000 * pow(200.0 / 20_000.0, -v))
+        } else {
+            band.filterType = .resonantHighPass
+            band.frequency = Float(20 * pow(8_000.0 / 20.0, v))
+        }
+    }
+
+    /// Pitch (cents) del TimePitch: compensación de keylock + key shift en semitonos.
+    private static func pitchCents(keyLock: Bool, rate: Double, keyShift: Int) -> Float {
+        let comp = keyLock ? 0.0 : -1200.0 * log2(rate)
+        return Float(comp + Double(keyShift) * 100.0)
+    }
+
+    /// Tap post-fader: calcula el RMS de cada buffer en el hilo de render y lo deja en la
+    /// caja thread-safe. El timer de UI (50 ms) lo convierte en nivel con attack/release.
+    private func installVUTap(on node: AVAudioMixerNode, box: VULevelBox) {
+        let format = node.outputFormat(forBus: 0)
+        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            box.value = Self.rms(of: buffer)
+        }
+    }
+
+    private static nonisolated func rms(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let data = buffer.floatChannelData else { return 0 }
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return 0 }
+        let channels = Int(buffer.format.channelCount)
+        var acc: Float = 0
+        for ch in 0..<channels {
+            var meanSquare: Float = 0
+            vDSP_measqv(data[ch], 1, &meanSquare, vDSP_Length(frames))
+            acc += meanSquare
+        }
+        return sqrt(acc / Float(channels))
     }
 
     // MARK: - Observadores (se conectan DESPUÉS de que el engine esté corriendo)
@@ -256,6 +344,16 @@ final class AudioEngine: ObservableObject {
         deckB.$stemDrumsMuted .sink { [weak self] m in self?.stemPlayersB[StemType.drums.rawValue].volume  = m ? 0 : 1 }.store(in: &cancellables)
         deckB.$stemBassMuted  .sink { [weak self] m in self?.stemPlayersB[StemType.bass.rawValue].volume   = m ? 0 : 1 }.store(in: &cancellables)
         deckB.$stemMelodyMuted.sink { [weak self] m in self?.stemPlayersB[StemType.melody.rawValue].volume = m ? 0 : 1 }.store(in: &cancellables)
+
+        // Filtro DJ (Ola 2)
+        deckA.$filter.sink { [weak self] v in guard let self else { return }; Self.applyFilter(v, to: self.filterA) }.store(in: &cancellables)
+        deckB.$filter.sink { [weak self] v in guard let self else { return }; Self.applyFilter(v, to: self.filterB) }.store(in: &cancellables)
+
+        // Key Shift (Ola 2) → recalcular pitch del TimePitch. receive(on:) difiere al
+        // siguiente ciclo del main loop: @Published emite en willSet y updateTimePitch
+        // relee la propiedad (necesita el valor NUEVO ya asignado).
+        deckA.$keyShift.receive(on: DispatchQueue.main).sink { [weak self] _ in self?.updateTimePitch(for: .left) }.store(in: &cancellables)
+        deckB.$keyShift.receive(on: DispatchQueue.main).sink { [weak self] _ in self?.updateTimePitch(for: .right) }.store(in: &cancellables)
     }
 
     // MARK: - Helpers de stems
@@ -458,7 +556,7 @@ final class AudioEngine: ObservableObject {
         // Reaplicar rate/pitch antes de play para asegurar que está activo
         let rate = max(deckState.tempo, 0.01)
         pitch.rate  = Float(rate)
-        pitch.pitch = deckState.keyLock ? 0 : Float(-1200.0 * log2(rate))
+        pitch.pitch = Self.pitchCents(keyLock: deckState.keyLock, rate: rate, keyShift: deckState.keyShift)
 
         // Arranque. En modo stems los 4 players deben arrancar en el MISMO instante de
         // hardware: play() secuencial los desalinearía unos ms entre sí. play(at:) con un
@@ -510,7 +608,7 @@ final class AudioEngine: ObservableObject {
         let rate      = max(newRate, 0.01)
 
         pitch.rate  = Float(rate)
-        pitch.pitch = deckState.keyLock ? 0 : Float(-1200.0 * log2(rate))
+        pitch.pitch = Self.pitchCents(keyLock: deckState.keyLock, rate: rate, keyShift: deckState.keyShift)
 
         if deckState.isPlaying {
             let currentT = currentAudioTime(deck: deck)
@@ -539,7 +637,7 @@ final class AudioEngine: ObservableObject {
 
         // Aplicar tempo al nodo de audio del slave
         slavePitch.rate  = Float(newRate)
-        slavePitch.pitch = slaveDeck.keyLock ? 0 : Float(-1200.0 * log2(newRate))
+        slavePitch.pitch = Self.pitchCents(keyLock: slaveDeck.keyLock, rate: newRate, keyShift: slaveDeck.keyShift)
 
         // Actualizar base de tiempo del slave (el tempo cambió).
         if slaveDeck.isPlaying {
@@ -883,6 +981,69 @@ final class AudioEngine: ObservableObject {
         }
     }
 
+    // MARK: - Key Sync / Beat Jump / Grabación (Ola 2)
+
+    /// Ajusta el keyShift del deck para casar su key (Camelot) con la del OTRO deck,
+    /// por el camino de semitonos más corto. Sin key en alguna pista → no hace nada.
+    func syncKey(deck: DeckID) {
+        let own   = deck == .left ? deckA : deckB
+        let other = deck == .left ? deckB : deckA
+        guard let ownKey = own.track?.key, let otherKey = other.track?.key else { return }
+        own.keyShift = ownKey.semitones(to: otherKey)
+    }
+
+    func resetKeyShift(deck: DeckID) {
+        (deck == .left ? deckA : deckB).keyShift = 0
+    }
+
+    /// Salta ±N beats manteniendo reproducción (beats × 60/BPM en tiempo de archivo).
+    func beatJump(deck: DeckID, beats: Int) {
+        let deckState = deck == .left ? deckA : deckB
+        guard let track = deckState.track, let bpm = track.bpm, bpm > 0 else { return }
+        let now = deckState.isPlaying ? currentAudioTime(deck: deck) : deckState.currentTime
+        let target = min(max(0, now + Double(beats) * 60.0 / bpm), track.duration)
+        seek(to: target, deck: deck)
+    }
+
+    /// Graba la salida master (post-limiter = lo que suena) a WAV en ~/Music/Pulso Recordings.
+    func toggleRecording() {
+        isRecording ? stopRecording() : startRecording()
+    }
+
+    private func startRecording() {
+        guard !isRecording else { return }
+        let dir = (FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first
+                   ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("Pulso Recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stamp = DateFormatter.recordingStamp.string(from: Date())
+        let url = dir.appendingPathComponent("Pulso Set \(stamp).wav")
+
+        let format = limiter.outputFormat(forBus: 0)
+        guard let file = try? AVAudioFile(forWriting: url, settings: format.settings) else {
+            print("[AudioEngine] ❌ No se pudo crear el WAV de grabación en \(url.path)")
+            return
+        }
+        let recorder = StreamRecorder(file: file)
+        activeRecorder = recorder
+        limiter.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+            recorder.write(buffer)
+        }
+        lastRecordingURL = url
+        isRecording = true
+        print("[AudioEngine] ⏺ Grabando en \(url.path)")
+    }
+
+    private func stopRecording() {
+        guard isRecording else { return }
+        limiter.removeTap(onBus: 0)
+        activeRecorder = nil   // AVAudioFile se cierra al liberarse
+        isRecording = false
+        if let url = lastRecordingURL {
+            print("[AudioEngine] ⏹ Grabación guardada: \(url.path)")
+        }
+    }
+
     // MARK: - Preescucha (cue) por canal propio
 
     /// Reproduce un archivo LOCAL por el canal de preescucha (auditioning tipo Rekordbox):
@@ -1103,7 +1264,7 @@ final class AudioEngine: ObservableObject {
         let rate   = max(state.tempo, 0.01)
 
         pitch.rate = Float(rate)
-        pitch.pitch = state.keyLock ? 0 : Float(-1200.0 * log2(rate))
+        pitch.pitch = Self.pitchCents(keyLock: state.keyLock, rate: rate, keyShift: state.keyShift)
 
         // Actualizar base time para que currentAudioTime no salte al cambiar tempo
         if state.isPlaying {
@@ -1173,6 +1334,8 @@ final class AudioEngine: ObservableObject {
         deck.loopEnd = snapshot.loopEnd
         deck.keyLock = snapshot.keyLock
         deck.hotCues = snapshot.hotCues
+        deck.filter = snapshot.filter ?? 0
+        deck.keyShift = snapshot.keyShift ?? 0
 
         if snapshot.trackID != nil {
             seek(to: snapshot.currentTime, deck: deckID)
@@ -1192,7 +1355,9 @@ final class AudioEngine: ObservableObject {
             loopStart: deck.loopStart,
             loopEnd: deck.loopEnd,
             keyLock: deck.keyLock,
-            hotCues: deck.hotCues
+            hotCues: deck.hotCues,
+            filter: deck.filter,
+            keyShift: deck.keyShift
         )
     }
 
@@ -1225,9 +1390,11 @@ final class AudioEngine: ObservableObject {
                     return
                 }
 
-                // VU meter: leer outputVolume del fader como proxy de nivel
-                let fader = deck == .left ? self.faderA : self.faderB
-                let vu = fader.outputVolume
+                // VU meter REAL: RMS del tap post-fader (attack inmediato, release suave).
+                let box = deck == .left ? self.vuBoxA : self.vuBoxB
+                let prev = deck == .left ? self.vuLevelA : self.vuLevelB
+                let scaled = min(box.value * 2.8, 1.0)   // ganancia visual: RMS musical ~0.1-0.35
+                let vu = scaled >= prev ? scaled : prev * 0.80 + scaled * 0.20
                 if deck == .left { self.vuLevelA = vu } else { self.vuLevelB = vu }
             }
         if deck == .left { timerA = timer } else { timerB = timer }
@@ -1237,4 +1404,38 @@ final class AudioEngine: ObservableObject {
         if deck == .left { timerA = nil; vuLevelA = 0 }
         else             { timerB = nil; vuLevelB = 0 }
     }
+}
+
+// MARK: - Auxiliares Ola 2 (thread-safe, viven fuera del @MainActor)
+
+/// Caja thread-safe para pasar el RMS del hilo de render de audio al timer de UI.
+final class VULevelBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Float = 0
+    var value: Float {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); stored = newValue; lock.unlock() }
+    }
+}
+
+/// Escritor de la grabación: el tap del limiter (hilo de render) escribe buffers al WAV.
+/// AVAudioFile no es Sendable; este wrapper garantiza que SOLO el hilo del tap lo toca
+/// tras la creación (el main solo mantiene/rompe la referencia).
+final class StreamRecorder: @unchecked Sendable {
+    private let file: AVAudioFile
+    init(file: AVAudioFile) { self.file = file }
+    func write(_ buffer: AVAudioPCMBuffer) {
+        do { try file.write(from: buffer) }
+        catch { /* buffer perdido; no parar el render thread por un fallo de disco */ }
+    }
+}
+
+extension DateFormatter {
+    /// "2026-07-11 14.35.02" — apto para nombre de archivo (sin dos puntos).
+    static let recordingStamp: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        df.locale = Locale(identifier: "en_US_POSIX")
+        return df
+    }()
 }

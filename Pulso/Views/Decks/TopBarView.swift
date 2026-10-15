@@ -3,6 +3,7 @@ import SwiftUI
 struct TopBarView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var libraryService: LibraryService
+    @EnvironmentObject var audioEngine: AudioEngine
 
     var body: some View {
         HStack {
@@ -15,6 +16,34 @@ struct TopBarView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            // REC: graba la salida master a WAV (~/Music/Pulso Recordings)
+            Button {
+                audioEngine.toggleRecording()
+            } label: {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(audioEngine.isRecording ? Color.red : Color.secondary.opacity(0.6))
+                        .frame(width: 8, height: 8)
+                    Text("REC")
+                        .font(.caption2.bold())
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(audioEngine.isRecording ? Color.red.opacity(0.25) : Color.white.opacity(0.08))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(audioEngine.isRecording ? "Parar grabación" : "Grabar el set (WAV en ~/Music/Pulso Recordings)")
+
+            if !audioEngine.isRecording, let url = audioEngine.lastRecordingURL {
+                Text("Guardado: \(url.lastPathComponent)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 260)
             }
 
             Spacer()

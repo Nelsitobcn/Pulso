@@ -20,6 +20,11 @@ final class DeckState: ObservableObject, Identifiable {
     @Published var keyLock: Bool = true
     @Published var hotCues: [HotCue] = []
 
+    /// Filtro DJ único (−1…+1): negativo = low-pass sweep, positivo = high-pass, 0 = bypass.
+    @Published var filter: Double = 0.0
+    /// Desplazamiento de tono en semitonos (−6…+6), independiente del tempo (Key Shift/Sync).
+    @Published var keyShift: Int = 0
+
     /// Zoom de la waveform (1× = pista entera; hasta 32× para colocar el cursor en el drop).
     @Published var waveformZoom: Double = 1.0
     /// Centro de la ventana visible de la waveform, en fracción [0,1] de la pista.
@@ -58,7 +63,9 @@ final class DeckState: ObservableObject, Identifiable {
     }
 
     var keyDisplay: String {
-        track?.key?.rawValue ?? "---"
+        guard let key = track?.key?.rawValue else { return "---" }
+        guard keyShift != 0 else { return key }
+        return "\(key) \(keyShift > 0 ? "+" : "")\(keyShift)"
     }
 
     var progress: Double {

@@ -171,4 +171,14 @@ enum MusicalKey: String, Codable, CaseIterable {
         let raw = rawValue.dropLast()
         return Int(raw) ?? 0
     }
+
+    /// Semitonos MÍNIMOS para llevar esta key a `other` (Key Sync).
+    /// En la rueda Camelot, +1 paso = +7 semitonos (quinta justa). Las keys relativas
+    /// (mismo número, letra distinta, ej. 8A/8B) comparten armadura → 0 semitonos.
+    /// Resultado en [−5…+6] (camino más corto en el círculo de quintas).
+    func semitones(to other: MusicalKey) -> Int {
+        let steps = (other.camelotNumber - camelotNumber + 12) % 12
+        let semis = (steps * 7) % 12
+        return semis > 6 ? semis - 12 : semis
+    }
 }
