@@ -17,6 +17,7 @@
 		2C25E2BD8B38B90A54C33A00 /* HiResWaveformCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */; };
 		320604246522AE05D48861D0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8236C939D512E4F41F901C83 /* SettingsView.swift */; };
 		378E950FF68FEB288C190A3C /* TurntableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA72FF8502521A96F5EA0F35 /* TurntableView.swift */; };
+		3CC8DA6D419C927B2B8EE975 /* StemSeparator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFB0482F71964720D264CF69 /* StemSeparator.swift */; };
 		40708D1D4CBBA523EFAC1459 /* DeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A1CDBEFC58AA6ABB0AC30 /* DeckView.swift */; };
 		496D04F5C5D48B8327937245 /* DeckState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 297EA09A864DF9450FF9546B /* DeckState.swift */; };
 		53AE6F640F0BCB770FC1BF37 /* CenterControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB5ACE88E9DD4C1F4AF66EB /* CenterControlsView.swift */; };
@@ -33,6 +34,7 @@
 		82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */; };
 		8A4CB6D467A6C7EEC24B6D9D /* BeatMatchPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2661C4C6919B2DB67C43FEE3 /* BeatMatchPanelView.swift */; };
 		8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A668A5FF3746B5387DC0C94 /* Track.swift */; };
+		92A46C88F3BB0850F6E360EF /* StemSeparator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFB0482F71964720D264CF69 /* StemSeparator.swift */; };
 		99183358CAF057224FF4242C /* trending.json in Resources */ = {isa = PBXBuildFile; fileRef = F2777A11FF7ABCF4EAD39B5E /* trending.json */; };
 		9FE19AB164C6DC277BD26C4A /* MixSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50C755F757450A628F87FD9 /* MixSession.swift */; };
 		A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B91547CC68CB6AB7492D15 /* TopBarView.swift */; };
@@ -79,6 +81,7 @@
 		8236C939D512E4F41F901C83 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiResWaveformCache.swift; sourceTree = "<group>"; };
 		9A948DE4CE18404260A9E357 /* EQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQView.swift; sourceTree = "<group>"; };
+		AFB0482F71964720D264CF69 /* StemSeparator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StemSeparator.swift; sourceTree = "<group>"; };
 		B4B224FA76EEF28A68714440 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B91CBB3AC62E16D8AAE3B197 /* DJAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJAssistantService.swift; sourceTree = "<group>"; };
 		BA72FF8502521A96F5EA0F35 /* TurntableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurntableView.swift; sourceTree = "<group>"; };
@@ -108,6 +111,7 @@
 				411EF2E560DB7B1047A38187 /* AudioEngine.swift */,
 				7CD77EAB49A295E975E96CE9 /* BeatGridAnalyzer.swift */,
 				956CF1AD6F964FEDE7E87401 /* HiResWaveformCache.swift */,
+				AFB0482F71964720D264CF69 /* StemSeparator.swift */,
 				F93B31F857AB63D02CFE9066 /* TrackAnalyzer.swift */,
 			);
 			path = Audio;
@@ -353,6 +357,7 @@
 				082CEA6CFA785BF9B98A7499 /* PulsoApp.swift in Sources */,
 				E554485012D958FAE47AF137 /* SessionStartView.swift in Sources */,
 				05D79F1A64133D932772B260 /* SettingsView.swift in Sources */,
+				3CC8DA6D419C927B2B8EE975 /* StemSeparator.swift in Sources */,
 				A1302091ED4E0F26D7A9EA24 /* TopBarView.swift in Sources */,
 				B90EDD594F6A59015758CB63 /* Track.swift in Sources */,
 				AB73C26E970E992033474A82 /* TrackAnalyzer.swift in Sources */,
@@ -384,6 +389,7 @@
 				5A02530A377ACAFE5DCAC647 /* PulsoApp.swift in Sources */,
 				CC78F29C51EB32C3546AD38C /* SessionStartView.swift in Sources */,
 				320604246522AE05D48861D0 /* SettingsView.swift in Sources */,
+				92A46C88F3BB0850F6E360EF /* StemSeparator.swift in Sources */,
 				B61692FAB12227CC8699FF97 /* TopBarView.swift in Sources */,
 				8ADB53E13DB7CAE4313D5999 /* Track.swift in Sources */,
 				82EC56FD6129C8A2F4FD2F7F /* TrackAnalyzer.swift in Sources */,

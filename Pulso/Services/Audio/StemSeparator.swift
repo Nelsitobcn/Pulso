@@ -148,10 +148,15 @@ actor StemSeparator {
             "--write-workers", "1"
         ])
 
+        // demucs-mlx escribe en <out>/<nombre>/ directamente (verificado 1.4.4);
+        // el Demucs original añade una subcarpeta <modelo>/. Aceptamos ambas.
         let baseName = inputWav.deletingPathExtension().lastPathComponent
-        let outDir = workDir
+        let flatDir = workDir.appendingPathComponent(baseName, isDirectory: true)
+        let nestedDir = workDir
             .appendingPathComponent("htdemucs", isDirectory: true)
             .appendingPathComponent(baseName, isDirectory: true)
+        let outDir = fm.fileExists(atPath: flatDir.appendingPathComponent(StemType.vocal.demucsFileName).path)
+            ? flatDir : nestedDir
 
         // 3. Mover a la carpeta definitiva indexada por trackID.
         let destDir = StemStore.directory(for: trackID)

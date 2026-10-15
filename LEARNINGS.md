@@ -17,6 +17,20 @@
 
 ---
 
+### [2026-07-11] — Stems Ola 1: dos bugs de integración demucs-mlx cazados en prueba E2E real
+**Bug 1**: demucs-mlx 1.4.4 crashea con MLX 0.31 en su modo por defecto: `RuntimeError: There is no Stream(gpu, 1) in current thread` (evalúa tensores GPU desde hilo secundario de prefetch/escritura).
+**Fix 1**: invocar SIEMPRE con `--prefetch-tracks 0 --write-workers 1` (StemSeparator.swift). Con 1 pista no se pierde nada.
+**Bug 2**: la app decía "demucs-mlx terminó pero faltan archivos de stems". demucs-mlx escribe en `<out>/<nombre>/{vocals,drums,bass,other}.wav` DIRECTAMENTE — sin la subcarpeta `<modelo>/` que sí crea el Demucs original (`<out>/htdemucs/<nombre>/`).
+**Fix 2**: StemSeparator acepta ambas rutas (mira primero la plana, cae a la anidada).
+**Regla**: un port (demucs-mlx) NO replica necesariamente el layout de salida del original (demucs). Probar el binario REAL en CLI y mirar dónde escribe ANTES de codificar rutas. Ambos bugs solo salieron ejecutando de verdad (smoke test CLI + E2E con la app) — el build compilaba perfecto.
+**Instalación**: `pipx install --force "demucs-mlx[convert]"` — los extras `[convert]` son OBLIGATORIOS (sin ellos: `ImportError: Model conversion requires the [convert] extras` en el primer uso).
+
+### [2026-07-11] — VU meters no miden audio: son proxy de fader.outputVolume (pre-existente, descubierto en E2E stems)
+**Bug** (cosmético, aún abierto): con los 4 stems muteados y el deck sonando en silencio, los VU meters A/B siguen mostrando nivel verde.
+**Causa**: `startTimer` usa `fader.outputVolume` (posición del volumen) como "nivel", no la señal real (AudioEngine.swift ~línea 1228, comentario lo admite: "como proxy de nivel"). Atajo del MVP.
+**Fix pendiente**: `installTap` en cada fader con RMS real (ventana ~50ms) → vuLevel. Barato y da feedback honesto.
+**Regla**: los VU meters actuales NO sirven como evidencia de verificación de audio. Para verificar mutes/silencio hay que escuchar o meter un tap real.
+
 ### [2026-07-01] — Panel beatmatch "bloques gruesos" al ampliar: era sobre-muestreo, no grosor
 **Bug**: la onda ampliada del panel central se veía como bloques macizos aunque cada barra se dibujaba a 1px.
 **Causa (medida)**: el panel amplía ~6s en ~1400px, pero el `waveformDetail` general (3000 cols para 222s) solo aporta **~81 columnas** en esa ventana → cada columna de dato se estira ~17px = bloque. No era el grosor de dibujo, era falta de resolución de datos AL AMPLIAR. Guardar ~52.000 cols/pista (1px por columna a esa escala) es inviable en disco.
