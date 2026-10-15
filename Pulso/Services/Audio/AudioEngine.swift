@@ -422,6 +422,10 @@ final class AudioEngine: ObservableObject {
         // de un SYNC activo, el timer del phase-lock lo pisaría 10×/seg ("lo hace muy mal").
         // Comportamiento CDJ estándar: tocar el pitch a mano DESENGANCHA el sync de ese deck.
         if phaseLockSlave == deck {
+            // El propio SYNC escribe `deck.tempo` → el .onChange del slider llama aquí con ese
+            // MISMO valor. No es el DJ moviendo el pitch: ignorarlo, o el SYNC soltaría el
+            // phase-lock que acaba de arrancar (bug E2E 15-oct: SYNC igualaba BPM pero nunca fase).
+            if let base = phaseLockBaseRate, abs(newRate - base) < 1e-9 { return }
             stopPhaseLock(restoreBaseRate: false)  // no restaurar: el slider manda ahora
         }
 
@@ -445,6 +449,20 @@ final class AudioEngine: ObservableObject {
             }
         }
     }
+
+    /// Deck "On Air": el que suena (si suenan los dos o ninguno, prioriza A si tiene pista).
+    /// Fuente única para el DJ IA: sobre qué pista se sugiere y a qué deck va lo sugerido.
+    var onAirDeck: DeckID? {
+        if deckA.isPlaying { return .left }
+        if deckB.isPlaying { return .right }
+        if deckA.track != nil { return .left }
+        if deckB.track != nil { return .right }
+        return nil
+    }
+
+    /// Deck donde cargar la siguiente canción: el contrario al On Air (B si no hay nada).
+    /// Así una sugerencia nunca sustituye a la pista que está sonando.
+    var nextDeck: DeckID { onAirDeck == .right ? .left : .right }
 
     func sync(slave: DeckID) {
         let masterDeck = slave == .left ? deckB : deckA
@@ -498,6 +516,8 @@ final class AudioEngine: ObservableObject {
 
     private var phaseLockTimer: AnyCancellable?
     private var phaseLockSlave: DeckID?
+    /// Tempo base que el SYNC fijó al slave (para distinguir el eco del slider de un cambio manual).
+    private var phaseLockBaseRate: Double?
 
     /// Fase de reproducción respecto al BEATGRID REAL (no contra t=0).
     /// `fileTime` es la posición actual en tiempo de archivo (segundos). Devuelve:
@@ -546,6 +566,7 @@ final class AudioEngine: ObservableObject {
     private func startPhaseLock(slave: DeckID, baseRate: Double) {
         stopPhaseLock()
         phaseLockSlave = slave
+        phaseLockBaseRate = baseRate
         let master: DeckID = slave == .left ? .right : .left
         let slavePitch = slave == .left ? pitchA : pitchB
 
@@ -664,6 +685,7 @@ final class AudioEngine: ObservableObject {
             }
         }
         phaseLockSlave = nil
+        phaseLockBaseRate = nil
     }
 
     /// Comportamiento CDJ: si reproduciendo → marca cue; si pausado → salta al cue marcado

@@ -52,7 +52,8 @@ struct MainDJView: View {
             if showLibrary {
                 LibraryView()
                     .environmentObject(youtube)
-                    .frame(maxHeight: 280)
+                    // 400 (antes 280): con el DJ IA abierto, 280 no dejaba sitio a la lista.
+                    .frame(maxHeight: 400)
                     .transition(.move(edge: .bottom))
             }
         }

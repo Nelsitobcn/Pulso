@@ -113,8 +113,10 @@ struct LibraryView: View {
                 youtube.query = query
                 searchYouTube()
             }) {
-                let deck = audioEngine.deckA.track ?? audioEngine.deckB.track
-                guard let current = deck else { return }
+                // Mismo deck que muestra «Sobre:» (bug E2E 15-oct: sugería siempre sobre A).
+                guard let air = audioEngine.onAirDeck,
+                      let current = (air == .left ? audioEngine.deckA : audioEngine.deckB).track
+                else { return }
                 Task { await djAssistant.suggestHybrid(current: current, library: libraryService.tracks) }
             }
             Divider()
@@ -381,9 +383,11 @@ struct DJAssistantBox: View {
     /// Track "On Air" en el que se basan las sugerencias (deck master = el que suena; si ambos
     /// o ninguno, prioriza A). Se muestra para que el DJ sepa sobre qué se sugiere (como Rekordbox).
     private var onAirTrack: Track? {
-        if audioEngine.deckA.isPlaying { return audioEngine.deckA.track }
-        if audioEngine.deckB.isPlaying { return audioEngine.deckB.track }
-        return audioEngine.deckA.track ?? audioEngine.deckB.track
+        switch audioEngine.onAirDeck {
+        case .left:  return audioEngine.deckA.track
+        case .right: return audioEngine.deckB.track
+        case nil:    return nil
+        }
     }
 
     var body: some View {
@@ -419,57 +423,65 @@ struct DJAssistantBox: View {
                 Text(err).font(.caption2).foregroundStyle(.secondary)
             }
 
-            ForEach(Array(assistant.suggestions.enumerated()), id: \.element.id) { idx, s in
-                let isTrending: Bool = {
-                    if case .trending = s.origin { return true }; return false
-                }()
-                HStack(spacing: 8) {
-                    // Primera columna: icono de origen (Serato/Rekordbox ponen aquí el logo del
-                    // servicio). Tendencia = llama 🔥; local = número de orden.
-                    if isTrending {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 11)).foregroundStyle(.orange).frame(width: 16)
-                    } else {
-                        Text("\(idx + 1)")
-                            .font(.caption2.bold()).foregroundStyle(.purple).frame(width: 16)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
-                            Text(s.track.title).font(.caption.bold()).lineLimit(1)
+            // Scroll propio y altura tope: si no, las sugerencias se comen los 280 px del
+            // panel y la lista de la biblioteca desaparece (bug E2E 15-oct).
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(assistant.suggestions.enumerated()), id: \.element.id) { idx, s in
+                        let isTrending: Bool = {
+                            if case .trending = s.origin { return true }; return false
+                        }()
+                        HStack(spacing: 8) {
+                            // Primera columna: icono de origen (Serato/Rekordbox ponen aquí el logo del
+                            // servicio). Tendencia = llama 🔥; local = número de orden.
                             if isTrending {
-                                Text("TOP")
-                                    .font(.system(size: 7, weight: .heavy))
-                                    .padding(.horizontal, 3).padding(.vertical, 1)
-                                    .background(Color.orange.opacity(0.25))
-                                    .foregroundStyle(.orange)
-                                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                                Image(systemName: "flame.fill")
+                                    .font(.system(size: 11)).foregroundStyle(.orange).frame(width: 16)
+                            } else {
+                                Text("\(idx + 1)")
+                                    .font(.caption2.bold()).foregroundStyle(.purple).frame(width: 16)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(s.track.title).font(.caption.bold()).lineLimit(1)
+                                    if isTrending {
+                                        Text("TOP")
+                                            .font(.system(size: 7, weight: .heavy))
+                                            .padding(.horizontal, 3).padding(.vertical, 1)
+                                            .background(Color.orange.opacity(0.25))
+                                            .foregroundStyle(.orange)
+                                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                                    }
+                                }
+                                Text(s.reason).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            Spacer()
+                            // Tendencia no-local → buscar en YouTube. Local → cargar al deck libre (no al que suena).
+                            if case let .trending(query) = s.origin {
+                                Button {
+                                    onSearchTrending(query)
+                                } label: {
+                                    Label("YouTube", systemImage: "magnifyingglass")
+                                        .font(.caption2)
+                                }
+                                .buttonStyle(.bordered).controlSize(.mini)
+                            } else {
+                                Button {
+                                    audioEngine.load(track: s.track, into: audioEngine.nextDeck)
+                                } label: {
+                                    Image(systemName: "arrow.right.circle").foregroundStyle(.tertiary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Cargar al deck libre")
+                                .accessibilityLabel("Cargar \(s.track.title) al deck libre")
                             }
                         }
-                        Text(s.reason).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer()
-                    // Tendencia no-local → buscar en YouTube. Local → cargar al Deck B.
-                    if case let .trending(query) = s.origin {
-                        Button {
-                            onSearchTrending(query)
-                        } label: {
-                            Label("YouTube", systemImage: "magnifyingglass")
-                                .font(.caption2)
-                        }
-                        .buttonStyle(.bordered).controlSize(.mini)
-                    } else {
-                        Button {
-                            audioEngine.load(track: s.track, into: .right)
-                        } label: {
-                            Image(systemName: "arrow.right.circle").foregroundStyle(.tertiary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Cargar al Deck B")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 3)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 3)
             }
+            .frame(minHeight: assistant.suggestions.isEmpty ? 0 : 76, maxHeight: 120)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -493,7 +505,7 @@ struct SuggestedTracksView: View {
                 HStack(spacing: 8) {
                     ForEach(tracks) { track in
                         Button {
-                            audioEngine.load(track: track, into: .right)
+                            audioEngine.load(track: track, into: audioEngine.nextDeck)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(track.title)
